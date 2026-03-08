@@ -2,5 +2,6 @@
   "idf.currentSetup": "/home/debangshup/.espressif/v5.5.3/esp-idf",
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
-  ]
+  ],
+  "cmake.sourceDirectory": "/home/debangshup/Programming/researchProjects/MiniModelBot/hello_world"
 }
