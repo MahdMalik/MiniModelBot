@@ -1,194 +1,298 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_netif.h"
-#include "esp_log.h"
-#include "nvs_flash.h"
-#include "esp_http_server.h"
+// esp32s3_websocket_receiver.ino
+#include <WiFi.h>
+#include <ArduinoWebsockets.h>
 
-// ─── CONFIG ───────────────────────────────────────────────
-#define WIFI_SSID       "Galaxy S20 5G 74b1"
-#define WIFI_PASSWORD   "helloooo"
-#define WS_PORT         8765
-#define MAX_RETRY       5
-// ──────────────────────────────────────────────────────────
+// TFLite Micro
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "tensorflow/lite/micro/system_setup.h"
+#include "tensorflow/lite/schema/schema_generated.h"
 
-static const char *TAG = "WS_SERVER";
-static EventGroupHandle_t wifi_event_group;
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
+// JPEG decoder
+#include "jpeg_decoder.h"
 
-static int retry_count = 0;
-static httpd_handle_t server = NULL;
+// Model weights
+#include "model_weights.h"
 
-// ── Stub: replace with your actual model inference call ───
-static void run_inference(const uint8_t *data, size_t data_len)
-{
-    ESP_LOGI(TAG, "[CV] Received frame: %u bytes", (unsigned)data_len);
-}
+using namespace websockets;
 
-// ─── WiFi Event Handler ───────────────────────────────────
-static void wifi_event_handler(void *arg, esp_event_base_t event_base,
-                                int32_t event_id, void *event_data)
-{
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (retry_count < MAX_RETRY) {
-            esp_wifi_connect();
-            retry_count++;
-            ESP_LOGI(TAG, "Retrying WiFi... (%d/%d)", retry_count, MAX_RETRY);
-        } else {
-            xEventGroupSetBits(wifi_event_group, WIFI_FAIL_BIT);
-        }
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
-        ESP_LOGI(TAG, "[WiFi] Connected! IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        retry_count = 0;
-        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
-    }
-}
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const char* WIFI_SSID     = "Galaxy S20 5G 74b1";
+const char* WIFI_PASSWORD = "helloooo";
+const uint16_t WS_PORT    = 8765;
+// ──────────────────────────────────────────────────────────────────────────────
 
-// ─── WiFi Init ────────────────────────────────────────────
-static void wifi_init_sta(void)
-{
-    wifi_event_group = xEventGroupCreate();
+// ─── MODEL CONFIG ─────────────────────────────────────────────────────────────
+#define MODEL_WIDTH       64
+#define MODEL_HEIGHT      64
+#define MODEL_CHANNELS    3
+#define NUM_CLASSES       4
+#define TENSOR_ARENA_SIZE (96 * 1024)
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler, NULL, &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                                        &wifi_event_handler, NULL, &instance_got_ip));
-
-    wifi_config_t wifi_config;
-    memset(&wifi_config, 0, sizeof(wifi_config));
-    memcpy(wifi_config.sta.ssid,     WIFI_SSID,     strlen(WIFI_SSID));
-    memcpy(wifi_config.sta.password, WIFI_PASSWORD, strlen(WIFI_PASSWORD));
-    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    EventBits_t bits = xEventGroupWaitBits(wifi_event_group,
-                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                           pdFALSE, pdFALSE, portMAX_DELAY);
-    if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGE(TAG, "Failed to connect to WiFi");
-    }
-    else{
-        ESP_LOGE(TAG, "Connected to WiFi...");
-    }
-}
-
-// ─── WebSocket Handler ────────────────────────────────────
-static esp_err_t ws_handler(httpd_req_t *req)
-{
-    if (req->method == HTTP_GET) {
-        ESP_LOGI(TAG, "[WS] Client connected!");
-        httpd_ws_frame_t ready_frame;
-        memset(&ready_frame, 0, sizeof(ready_frame));
-        ready_frame.type    = HTTPD_WS_TYPE_TEXT;
-        ready_frame.payload = (uint8_t *)"READY";
-        ready_frame.len     = 5;
-        httpd_ws_send_frame(req, &ready_frame);
-        return ESP_OK;
-    }
-
-    // First pass: get frame length only
-    httpd_ws_frame_t ws_pkt;
-    memset(&ws_pkt, 0, sizeof(ws_pkt));
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-
-    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
-    if (ret != ESP_OK) return ret;
-    if (ws_pkt.len == 0) return ESP_OK;
-
-    // Allocate buffer and receive actual data
-    uint8_t *buf = (uint8_t *)calloc(1, ws_pkt.len + 1);
-    if (!buf) return ESP_ERR_NO_MEM;
-
-    ws_pkt.payload = buf;
-    ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
-    if (ret != ESP_OK) {
-        free(buf);
-        return ret;
-    }
-
-    if (ws_pkt.type == HTTPD_WS_TYPE_BINARY) {
-        run_inference(ws_pkt.payload, ws_pkt.len);
-
-        // Send ACK
-        httpd_ws_frame_t ack_frame;
-        memset(&ack_frame, 0, sizeof(ack_frame));
-        ack_frame.type    = HTTPD_WS_TYPE_TEXT;
-        ack_frame.payload = (uint8_t *)"ACK";
-        ack_frame.len     = 3;
-        httpd_ws_send_frame(req, &ack_frame);
-
-    } else if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
-        ESP_LOGI(TAG, "[WS] Text: %s", ws_pkt.payload);
-    } else if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
-        ESP_LOGI(TAG, "[WS] Client disconnected.");
-    }
-
-    free(buf);
-    return ESP_OK;
-}
-
-static const httpd_uri_t ws_uri = {
-    "/",
-    HTTP_GET,
-    ws_handler,
-    NULL,
-    true,       // is_websocket
-    false,      // handle_ws_control_frames
-    NULL        // supported_subprotocol
+// Edit these to match your actual training labels
+static const char* CLASS_LABELS[NUM_CLASSES] = {
+    "class_0",
+    "class_1",
+    "class_2",
+    "class_3",
 };
+// ──────────────────────────────────────────────────────────────────────────────
 
-// ─── Start WebSocket Server ───────────────────────────────
-static void start_ws_server(void)
+static uint8_t s_tensor_arena[TENSOR_ARENA_SIZE];
+static tflite::MicroInterpreter* s_interpreter = nullptr;
+static TfLiteTensor* s_input  = nullptr;
+static TfLiteTensor* s_output = nullptr;
+
+WebsocketsServer server;
+WebsocketsClient client;
+bool clientConnected = false;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cv_model_set_input: decode the incoming JPEG, resize to 64x64, and load
+// the pixel data into the TFLite input tensor ready for inference.
+// ─────────────────────────────────────────────────────────────────────────────
+static bool cv_model_set_input(const uint8_t* jpeg_data, size_t jpeg_len)
 {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = WS_PORT;
+    // 1. Get the decoded image dimensions without fully decoding yet,
+    //    so we can allocate exactly the right output buffer.
+    esp_jpeg_image_cfg_t info_cfg = {};
+    info_cfg.indata      = (uint8_t*)jpeg_data;
+    info_cfg.indata_size = jpeg_len;
+    info_cfg.out_format  = JPEG_IMAGE_FORMAT_RGB888;
+    info_cfg.out_scale   = JPEG_IMAGE_SCALE_0;
 
-    if (httpd_start(&server, &config) == ESP_OK) {
-        httpd_register_uri_handler(server, &ws_uri);
-        ESP_LOGI(TAG, "[WS] Server started on port %d", WS_PORT);
+    esp_jpeg_image_output_t info = {};
+    if (esp_jpeg_get_image_info(&info_cfg, &info) != ESP_OK) {
+        Serial.println("[CV] Failed to read JPEG info");
+        return false;
+    }
+
+    // 2. Allocate output buffer and decode.
+    uint8_t* rgb = (uint8_t*)malloc(info.output_len);
+    if (!rgb) {
+        Serial.println("[CV] OOM for JPEG decode buffer");
+        return false;
+    }
+
+    esp_jpeg_image_cfg_t dec_cfg = {};
+    dec_cfg.indata      = (uint8_t*)jpeg_data;
+    dec_cfg.indata_size = jpeg_len;
+    dec_cfg.outbuf      = rgb;
+    dec_cfg.outbuf_size = info.output_len;
+    dec_cfg.out_format  = JPEG_IMAGE_FORMAT_RGB888;
+    dec_cfg.out_scale   = JPEG_IMAGE_SCALE_0;
+
+    esp_jpeg_image_output_t decoded = {};
+    if (esp_jpeg_decode(&dec_cfg, &decoded) != ESP_OK) {
+        Serial.println("[CV] JPEG decode failed");
+        free(rgb);
+        return false;
+    }
+
+    uint32_t src_w = decoded.width;
+    uint32_t src_h = decoded.height;
+    Serial.printf("[CV] Decoded JPEG: %ux%u\n", src_w, src_h);
+
+    // 3. Nearest-neighbour resize to MODEL_WIDTH x MODEL_HEIGHT
+    //    and fill the input tensor (handles both int8 and uint8 quantised models).
+    bool  is_int8 = (s_input->type == kTfLiteInt8);
+    float scale   = s_input->params.scale;
+    int   zp      = s_input->params.zero_point;
+
+    for (int y = 0; y < MODEL_HEIGHT; y++) {
+        uint32_t sy = (uint32_t)((float)y / MODEL_HEIGHT * src_h);
+        for (int x = 0; x < MODEL_WIDTH; x++) {
+            uint32_t sx  = (uint32_t)((float)x / MODEL_WIDTH * src_w);
+            int      src = (sy * src_w + sx) * 3;
+            int      dst = (y  * MODEL_WIDTH + x) * MODEL_CHANNELS;
+
+            for (int c = 0; c < MODEL_CHANNELS; c++) {
+                float px = (float)rgb[src + c];
+                if (is_int8) {
+                    int q = (int)(px / scale) + zp;
+                    if (q >  127) q =  127;
+                    if (q < -128) q = -128;
+                    s_input->data.int8[dst + c] = (int8_t)q;
+                } else {
+                    s_input->data.uint8[dst + c] = (uint8_t)px;
+                }
+            }
+        }
+    }
+
+    free(rgb);
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cv_model_run: run inference on whatever is already in the input tensor.
+// Returns true on success.
+// ─────────────────────────────────────────────────────────────────────────────
+static bool cv_model_run()
+{
+    if (s_interpreter->Invoke() != kTfLiteOk) {
+        Serial.println("[CV] Invoke() failed");
+        return false;
+    }
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cv_model_get_output: argmax over the output tensor scores.
+// Returns the winning class index (0 to NUM_CLASSES-1).
+// ─────────────────────────────────────────────────────────────────────────────
+static int cv_model_get_output()
+{
+    int   best   = 0;
+    float bscore = -1e9f;
+
+    for (int i = 0; i < NUM_CLASSES; i++) {
+        float score = (s_output->type == kTfLiteInt8)
+            ? (s_output->data.int8[i] - s_output->params.zero_point)
+              * s_output->params.scale
+            : s_output->data.f[i];
+
+        Serial.printf("[CV]   class %d (%s) = %.4f\n", i, CLASS_LABELS[i], score);
+        if (score > bscore) { bscore = score; best = i; }
+    }
+
+    Serial.printf("[CV] ► Prediction: %s (%.4f)\n", CLASS_LABELS[best], bscore);
+    return best;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TFLite initialisation — called once from setup()
+// ─────────────────────────────────────────────────────────────────────────────
+static bool tflite_init()
+{
+    tflite::InitializeTarget();
+
+    const tflite::Model* model = tflite::GetModel(g_model2_quantized);
+    if (model->version() != TFLITE_SCHEMA_VERSION) {
+        Serial.printf("[TF] Schema mismatch: got %u expected %d\n",
+                      model->version(), TFLITE_SCHEMA_VERSION);
+        return false;
+    }
+
+    static tflite::MicroMutableOpResolver<10> resolver;
+    resolver.AddConv2D();
+    resolver.AddDepthwiseConv2D();
+    resolver.AddFullyConnected();
+    resolver.AddAveragePool2D();
+    resolver.AddSoftmax();
+    resolver.AddReshape();
+    resolver.AddAdd();
+    resolver.AddMul();
+    resolver.AddQuantize();
+    resolver.AddDequantize();
+
+    static tflite::MicroInterpreter interpreter(
+        model, resolver, s_tensor_arena, TENSOR_ARENA_SIZE);
+
+    if (interpreter.AllocateTensors() != kTfLiteOk) {
+        Serial.println("[TF] AllocateTensors() failed");
+        return false;
+    }
+
+    s_interpreter = &interpreter;
+    s_input       = interpreter.input(0);
+    s_output      = interpreter.output(0);
+
+    Serial.printf("[TF] Ready. Input [%d,%d,%d,%d] type=%d\n",
+                  s_input->dims->data[0], s_input->dims->data[1],
+                  s_input->dims->data[2], s_input->dims->data[3],
+                  s_input->type);
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// runInference — called on every incoming binary WebSocket frame
+// ─────────────────────────────────────────────────────────────────────────────
+void runInference(const char* data, size_t dataLen) {
+    Serial.printf("[CV] Received frame: %u bytes\n", dataLen);
+
+    if (!cv_model_set_input((const uint8_t*)data, dataLen)) {
+        client.send("{\"error\":\"set_input failed\"}");
+        return;
+    }
+
+    if (!cv_model_run()) {
+        client.send("{\"error\":\"inference failed\"}");
+        return;
+    }
+
+    int result = cv_model_get_output();
+
+    // Send result back to the Python script as JSON
+    char json[128];
+    snprintf(json, sizeof(json),
+             "{\"class\":%d,\"label\":\"%s\"}", result, CLASS_LABELS[result]);
+    client.send(json);
+    Serial.printf("[WS] Sent: %s\n", json);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// setup / loop — unchanged from original
+// ─────────────────────────────────────────────────────────────────────────────
+void setup() {
+    Serial.begin(115200);
+    delay(500);
+
+    // Initialise TFLite before anything else
+    Serial.println("[TF] Initialising TFLite Micro...");
+    if (!tflite_init()) {
+        Serial.println("[TF] FAILED — halting.");
+        while (1) delay(1000);
+    }
+
+    // Connect to WiFi
+    Serial.printf("\nConnecting to %s", WIFI_SSID);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.printf("\n[WiFi] Connected! IP: %s\n",
+                  WiFi.localIP().toString().c_str());
+
+    // Start WebSocket server
+    server.listen(WS_PORT);
+    if (server.available()) {
+        Serial.printf("[WS] Server started on port %u\n", WS_PORT);
     } else {
-        ESP_LOGI(TAG, "[WS] ERROR: Server failed to start!");
+        Serial.println("[WS] ERROR: Server failed to start!");
     }
 }
 
-// ─── Main ─────────────────────────────────────────────────
-extern "C" void app_main(void)
-{
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
+void loop() {
+    // Accept new client if none connected
+    if (!clientConnected && server.poll()) {
+        client = server.accept();
+
+        if (client.available()) {
+            clientConnected = true;
+            Serial.println("[WS] Client connected!");
+
+            client.send("READY");
+
+            client.onMessage([](WebsocketsMessage msg) {
+                if (msg.isBinary()) {
+                    runInference(msg.c_str(), msg.length());
+                } else if (msg.isText()) {
+                    Serial.printf("[WS] Text: %s\n", msg.c_str());
+                }
+            });
+
+            client.onEvent([](WebsocketsEvent event, String data) {
+                if (event == WebsocketsEvent::ConnectionClosed) {
+                    Serial.println("[WS] Client disconnected.");
+                    clientConnected = false;
+                }
+            });
+        }
     }
-    ESP_ERROR_CHECK(ret);
 
-    
-    wifi_init_sta();
-    start_ws_server();
-
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    if (clientConnected && client.available()) {
+        client.poll();
     }
 }
