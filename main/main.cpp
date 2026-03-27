@@ -192,36 +192,26 @@ float getRawDutyFromPercent(float duty){
 }
 
 //from the direction going from -100 to 100, gets actual duty value needed to send to the motors
-float getRawDutyFromBaseDirection(float duty)
+uint32_t getRawDutyFromBaseDirection(float direction)
 {
-	//if duty is positive, remember valid values are from 86 - 100. If negative, from 36-50
-	uint8_t range = upperReverseBound - lowerReverseBound;
-	//if positive movement
-	if(duty > 1)
-	{
-		//first get it between 0 and 1, then multiple to get in the forward range, then add by lower bound to get a range between loewr and upper bound.
-		//this keeps it in the correct range 56 to 89
-		duty /= 100.0;
-		duty *= range;
-		duty += lowerForwardBound;
-	}
-	// if negative movement
-	else if(duty < -1)
-	{
-		//first limit it to the range -1 to 0  by dividing by (100 / range)
-		duty /= 100.0;
-		//then put it in the correct range from say -33 to 0 by multiplying by range
-		duty *= range;
-		//now, add 33 to put it in the range 0 and 33, and then add 16 to put it in the range 16 to 49
-		duty += range + lowerReverseBound;
-	}
-	// meaning movement is roughly 0, so set it to 53 which makes it about 0.
-	else
-	{
-		duty = 7.5;
-	}
-	//now that we have correct duty cycle numbers, get specifically the raw duty
-	return getRawDutyFromPercent(duty);
+    // direction: -100 to 100
+
+    float pulse;
+
+    if (direction > 0)
+    {
+        pulse = 1500 + (direction / 100.0) * 500; // 1500 → 2000
+    }
+    else if (direction < 0)
+    {
+        pulse = 1500 + (direction / 100.0) * 500; // 1500 → 1000
+    }
+    else
+    {
+        pulse = 1500;
+    }
+
+    return (pulse / 20000.0) * (1 << LEDC_DUTY_RES);
 }
 
 //converts pulse width (in ms) to the proper duty cycle RAW. Not sure if this is right, may have to check
@@ -243,15 +233,15 @@ void move(bool startup){
 		//Move the left motor
 		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(currentDirection[0]));
 		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(currentDirection[1]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(currentDirection[1]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
 	}
 	else
 	{
 		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(currentDirection[0]));
 		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(currentDirection[1]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(currentDirection[1]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
 	}
 
 
@@ -419,7 +409,15 @@ extern "C" void app_main(void) {
 	currentDirection[0] = 2;
 	currentDirection[1] = -2;
 	move(false);
-    
+	for(int i = 2; i < 100; i++)
+	{
+		currentDirection[0] = i;
+		currentDirection[1] = -i;
+		move(false);
+		vTaskDelay(pdMS_TO_TICKS(50));
+	}
+    vTaskDelay(pdMS_TO_TICKS(10000));
+
     // Just launch the task and let it run
     
     // app_main can now just chill or handle other things (like WiFi/HTTP)
