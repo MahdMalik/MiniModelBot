@@ -130,7 +130,7 @@ bool bmiReady = false;
 
 //the way we do it is first index - left motor, second index - right motor.
 
-//for currente direction, ti's between -100 and 100. negative numbers mean reverse motor,
+//for current direction, ti's between -100 and 100. negative numbers mean reverse motor,
 //and -100 reverses and greater speed than say -10, and 100 goes at faster spee than say
 //10. We will later map this to the proper duty values
 static float currentDirection[2] = {0, 0};
@@ -153,6 +153,7 @@ espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
         return err == ESP_OK;
     }
 };
+
 
 std::unique_ptr<espp::Bmi270<espp::bmi270::Interface::I2C>> bmi;
 

@@ -9,7 +9,7 @@
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
   },
-  "idf.portWin": "COM40",
+  "idf.portWin": "COM10",
   "idf.flashType": "UART",
   "idf.currentSetup": "C:\\Users\\mahd\\esp\\v5.4\\esp-idf"
 }
