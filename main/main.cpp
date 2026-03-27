@@ -43,10 +43,10 @@
 #define LEDC_FREQUENCY  50 // Frequency in Hertz. Set frequency at 4 kHz
 
 //YELLOW IS LEFT MOTOR, WHITE IS RIGHT MOTOR
-#define LEFT_FRONT_MOTOR_PIN    GPIO_NUM_38 // Define the output GPIO
+#define LEFT_FRONT_MOTOR_PIN    GPIO_NUM_37 // Define the output GPIO
 #define LEFT_BACK_MOTOR_PIN     GPIO_NUM_35 // Define the output GPIO
-#define RIGHT_FRONT_MOTOR_PIN	GPIO_NUM_36 // Define the output GPIO
-#define RIGHT_BACK_MOTOR_PIN	GPIO_NUM_37 // Define the output GPIO
+#define RIGHT_FRONT_MOTOR_PIN	GPIO_NUM_38 // Define the output GPIO
+#define RIGHT_BACK_MOTOR_PIN	GPIO_NUM_36 // Define the output GPIO
 
 
 #define LEDC_CHANNEL_LEFT_FRONT          LEDC_CHANNEL_0
@@ -252,7 +252,6 @@ void move(bool startup){
 		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
 		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(currentDirection[1]));
 		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(currentDirection[1]));
-
 	}
 
 
