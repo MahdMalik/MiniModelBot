@@ -95,6 +95,9 @@ extern "C" void app_main(void) {
 		move(false);
 		vTaskDelay(pdMS_TO_TICKS(50));
 	}
+
+	IMUData newData = getSensorData();
+
     vTaskDelay(pdMS_TO_TICKS(10000));
 
     // Just launch the task and let it run

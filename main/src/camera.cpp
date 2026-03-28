@@ -71,8 +71,8 @@ void cameraInit()
 
         .xclk_freq_hz = CLOCK_FREQ,
 
-        .ledc_timer = LEDC_TIMER_0,
-        .ledc_channel = LEDC_CHANNEL_0,
+        .ledc_timer = LEDC_TIMER_1,
+        .ledc_channel = LEDC_CHANNEL_4,
 
         .pixel_format = PIXFORMAT_GRAYSCALE,
         .frame_size = FRAMESIZE_96X96,

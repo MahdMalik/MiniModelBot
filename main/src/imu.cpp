@@ -97,7 +97,9 @@ void sensorSetup()
     }
 }
 
-void getSensorData()
+
+
+IMUData getSensorData()
 {
     if(bmiReady)
     {
@@ -111,6 +113,17 @@ void getSensorData()
 
 			auto elapsed = esp_timer_get_time() - start;
 			fmt::print("Update time: {} µs\n", elapsed);
+
+            IMUData returnedData;
+            returnedData.ax = accel.x;
+            returnedData.ay = accel.y;
+            returnedData.az = accel.z;
+            returnedData.gx = gyro.x;
+            returnedData.gy = gyro.y;
+            returnedData.gz = gyro.z;
+
+            return returnedData;
         }
     }
+    return IMUData();
 }

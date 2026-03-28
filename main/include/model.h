@@ -34,6 +34,7 @@
 #include "PrintFunctions.h"
 #include "model_data.h"
 #include "camera.h"
+#include <new>
 
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
@@ -43,4 +44,4 @@
 extern bool modelSetupFailed;
 
 void setupModel();
-void modelCall(camera_fb_t *theFrame);
+void modelCall();

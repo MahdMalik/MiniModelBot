@@ -9,9 +9,10 @@ extern const unsigned int modelLen;
 const int tensorMemorySize = 190000;
 uint8_t tensorMemoryArea[tensorMemorySize];
 
-const tflite::Model* model;
+const tflite::Model* model = nullptr;
 static tflite::MicroMutableOpResolver<5> operationsManager;
-static tflite::MicroInterpreter interpreter (model, operationsManager, tensorMemoryArea, tensorMemorySize);
+alignas(tflite::MicroInterpreter) uint8_t buffer[sizeof(tflite::MicroInterpreter)];
+static tflite::MicroInterpreter* interpreter = nullptr;
 
 float theOutputScale;
 int32_t theOutputZeroPoint;
@@ -44,8 +45,12 @@ void setupModel()
         CustomPrint("MODEL", "Added op scucessfully (?)");
     }
 
+    interpreter = new (buffer) tflite::MicroInterpreter(
+        model, operationsManager, tensorMemoryArea, tensorMemorySize
+    );
+
     // Allocate memory from the tensor_arena for the model's tensors.
-    TfLiteStatus checkAllocationSuccess = interpreter.AllocateTensors();
+    TfLiteStatus checkAllocationSuccess = interpreter->AllocateTensors();
     if (checkAllocationSuccess != kTfLiteOk) 
     {
         CustomPrint("MODEL", "AllocateTensors() failed");
@@ -69,8 +74,8 @@ void setupModel()
         CustomPrint("MEMORY", "Amount of used RAM is %.2f%%\n", percentUsed);
     }
 
-    theOutputScale = interpreter.output(0)->params.scale;
-    theOutputZeroPoint = interpreter.output(0)->params.zero_point;
+    theOutputScale = interpreter->output(0)->params.scale;
+    theOutputZeroPoint = interpreter->output(0)->params.zero_point;
 
     CustomPrint("MODEL", "The output scaling factor is %f\n", theOutputScale);
     CustomPrint("MODEL", "The output zero point number is actually %d\n", theOutputZeroPoint);
@@ -82,9 +87,9 @@ void modelCall()
 
     for (short i = 0; i < theFrame->len; i++)
     {
-        interpreter.input(0)->data.int8[i] = (int8_t) theFrame->buf[i];
+        interpreter->input(0)->data.int8[i] = (int8_t) theFrame->buf[i];
     }
-    TfLiteStatus inferenceResult = interpreter.Invoke();
+    TfLiteStatus inferenceResult = interpreter->Invoke();
 
     if (inferenceResult != kTfLiteOk) 
     {
@@ -96,7 +101,7 @@ void modelCall()
         CustomPrint("MODEL", "INVOCATION WORKED!!!! HALLELUJAH!!");
     }
     
-    int8_t stillQuantizedOutputClass0 = interpreter.output(0)->data.int8[0];
+    int8_t stillQuantizedOutputClass0 = interpreter->output(0)->data.int8[0];
 
     //unquantize it this way, get class 1 prob from it easily then
     float class0Prob = (float) (stillQuantizedOutputClass0 - theOutputZeroPoint) * theOutputScale;

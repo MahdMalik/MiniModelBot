@@ -36,6 +36,11 @@
 #include "PrintFunctions.h"
 #include "driver/i2c.h"
 
+struct IMUData {
+    float ax, ay, az;
+    float gx, gy, gz;
+};
+
 extern bool bmiReady;
 
 void i2c_bus_init();
@@ -44,4 +49,4 @@ void i2c_bus_recovery();
 
 void sensorSetup();
 
-void getSensorData();
+IMUData getSensorData();
