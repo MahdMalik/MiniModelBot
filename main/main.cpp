@@ -394,11 +394,11 @@ void sensor_task(void *pvParameters) {
             auto gyro = bmi->get_gyroscope();
             printf("Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
                 accel.x, accel.y, accel.z, gyro.x, gyro.y, gyro.z);
-				
+
 			auto elapsed = esp_timer_get_time() - start;
 			fmt::print("Update time: {} µs\n", elapsed);
         }
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 10Hz update rate
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1Hz update rate
     }
 }
 
