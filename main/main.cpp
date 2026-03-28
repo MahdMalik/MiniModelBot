@@ -64,8 +64,8 @@ int8_t framesUntilPrint = 60;
 unsigned long previousTime = 0; // For loop timing
 
 
-#define I2C_MASTER_SCL_IO           4      // Check your board's pins
-#define I2C_MASTER_SDA_IO           5      
+#define I2C_MASTER_SCL_IO           41      // Check your board's pins
+#define I2C_MASTER_SDA_IO           42      
 #define I2C_MASTER_NUM              I2C_NUM_0
 #define I2C_MASTER_FREQ_HZ          100000  // BMI270 supports Fast Mode
 #define BMI270_ADDR                 0x68    // ADR pin to GND
@@ -130,7 +130,7 @@ bool bmiReady = false;
 
 //the way we do it is first index - left motor, second index - right motor.
 
-//for currente direction, ti's between -100 and 100. negative numbers mean reverse motor,
+//for current direction, ti's between -100 and 100. negative numbers mean reverse motor,
 //and -100 reverses and greater speed than say -10, and 100 goes at faster spee than say
 //10. We will later map this to the proper duty values
 static float currentDirection[2] = {0, 0};
@@ -153,6 +153,7 @@ espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
         return err == ESP_OK;
     }
 };
+
 
 std::unique_ptr<espp::Bmi270<espp::bmi270::Interface::I2C>> bmi;
 
@@ -387,13 +388,17 @@ void sensor_task(void *pvParameters) {
 
     while (1) {
         float dt = 1.0f; // Note: Use actual timing if doing balance math later!
+		auto start = esp_timer_get_time();
         if (bmi->update(dt, ec)) {
             auto accel = bmi->get_accelerometer();
             auto gyro = bmi->get_gyroscope();
             printf("Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
                 accel.x, accel.y, accel.z, gyro.x, gyro.y, gyro.z);
+
+			auto elapsed = esp_timer_get_time() - start;
+			fmt::print("Update time: {} µs\n", elapsed);
         }
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 10Hz update rate
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1Hz update rate
     }
 }
 
