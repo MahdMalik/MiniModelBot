@@ -80,7 +80,6 @@ void modelCall()
 {
     camera_fb_t *theFrame = getCamFrame();
 
-    
     for (short i = 0; i < theFrame->len; i++)
     {
         interpreter.input(0)->data.int8[i] = (int8_t) theFrame->buf[i];
