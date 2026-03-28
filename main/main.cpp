@@ -64,8 +64,8 @@ int8_t framesUntilPrint = 60;
 unsigned long previousTime = 0; // For loop timing
 
 
-#define I2C_MASTER_SCL_IO           4      // Check your board's pins
-#define I2C_MASTER_SDA_IO           5      
+#define I2C_MASTER_SCL_IO           41      // Check your board's pins
+#define I2C_MASTER_SDA_IO           42      
 #define I2C_MASTER_NUM              I2C_NUM_0
 #define I2C_MASTER_FREQ_HZ          100000  // BMI270 supports Fast Mode
 #define BMI270_ADDR                 0x68    // ADR pin to GND
