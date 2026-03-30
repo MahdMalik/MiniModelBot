@@ -1,57 +1,70 @@
 #include "imu.h"
+#include "driver/i2c_master.h"
 
-#define I2C_MASTER_SCL_IO           41      // Check your board's pins
-#define I2C_MASTER_SDA_IO           42      
-#define I2C_MASTER_NUM              I2C_NUM_0
-#define I2C_MASTER_FREQ_HZ          100000  // BMI270 supports Fast Mode
-#define BMI270_ADDR                 0x68    // ADR pin to GND
+#define I2C_MASTER_SCL_IO           5
+#define I2C_MASTER_SDA_IO           4
+#define I2C_MASTER_NUM              I2C_NUM_1 // Try Port 1 to avoid Cam Port 0 conflicts
+#define I2C_MASTER_FREQ_HZ          100000
+#define BMI270_ADDR                 0x68
 
 bool bmiReady = false;
+static i2c_master_bus_handle_t bus_handle;
+static i2c_master_dev_handle_t dev_handle;
 
+// 🔧 BMI CONFIG (Aligned with espp docs)
 espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
     .device_address = BMI270_ADDR,
-	.write = [](uint8_t dev_addr, const uint8_t *data, size_t len) {
-		esp_err_t err = i2c_master_write_to_device(I2C_MASTER_NUM, dev_addr, data, len, 1000 / portTICK_PERIOD_MS);
-		// Add a microscopic pause to let the BMI270 internal ASIC process the buffer
-		ets_delay_us(100); 
-		return err == ESP_OK;
-	},
-    .read = [](uint8_t dev_addr, uint8_t *data, size_t len) {
-        esp_err_t err = i2c_master_read_from_device(I2C_MASTER_NUM, dev_addr, data, len, 1000 / portTICK_PERIOD_MS);
-        return err == ESP_OK;
+    .write = [](uint8_t reg, const uint8_t *data, size_t len) {
+        uint8_t buffer[len + 1];
+        buffer[0] = reg;
+        memcpy(&buffer[1], data, len);
+        esp_err_t err = i2c_master_transmit(dev_handle, buffer, len + 1, -1);
+        return err == ESP_OK; // espp expects bool
+    },
+    .read = [](uint8_t reg, uint8_t *data, size_t len) {
+        esp_err_t err = i2c_master_transmit_receive(dev_handle, &reg, 1, data, len, -1);
+        return err == ESP_OK; // espp expects bool
     }
 };
-
 
 std::unique_ptr<espp::Bmi270<espp::bmi270::Interface::I2C>> bmi;
 std::error_code ec;
 
-
-void i2c_bus_init() {
-    // 1. PHYSICAL RESET: Force pins to a known state first
+esp_err_t i2c_bus_init() {
+    // 1. PHYSICAL PRE-CHARGE (Force pins HIGH because they lack resistors)
     gpio_reset_pin((gpio_num_t)I2C_MASTER_SDA_IO);
     gpio_reset_pin((gpio_num_t)I2C_MASTER_SCL_IO);
-    gpio_set_direction((gpio_num_t)I2C_MASTER_SDA_IO, GPIO_MODE_OUTPUT);
-    gpio_set_direction((gpio_num_t)I2C_MASTER_SCL_IO, GPIO_MODE_OUTPUT);
-    
-    // Hold them HIGH (idle state for I2C)
+    gpio_set_direction((gpio_num_t)I2C_MASTER_SDA_IO, GPIO_MODE_OUTPUT_OD);
+    gpio_set_direction((gpio_num_t)I2C_MASTER_SCL_IO, GPIO_MODE_OUTPUT_OD);
     gpio_set_level((gpio_num_t)I2C_MASTER_SDA_IO, 1);
     gpio_set_level((gpio_num_t)I2C_MASTER_SCL_IO, 1);
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(100));
 
-    // 2. NOW initialize the official driver
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = (gpio_num_t)I2C_MASTER_SDA_IO,
-        .scl_io_num = (gpio_num_t)I2C_MASTER_SCL_IO,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master = { .clk_speed = 100000 },
+    // 2. BUS CONFIG
+    i2c_master_bus_config_t bus_config = {
+        .i2c_port = I2C_MASTER_NUM,
+        .sda_io_num = (gpio_num_t) I2C_MASTER_SDA_IO,
+        .scl_io_num = (gpio_num_t) I2C_MASTER_SCL_IO,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags = { .enable_internal_pullup = 1 }
     };
-    ESP_ERROR_CHECK(i2c_param_config(I2C_MASTER_NUM, &conf));
-    ESP_ERROR_CHECK(i2c_driver_install(I2C_MASTER_NUM, conf.mode, 0, 0, 0));
+
+    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &bus_handle));
+
+    i2c_device_config_t dev_config = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = BMI270_ADDR,
+        .scl_speed_hz = I2C_MASTER_FREQ_HZ,
+    };
+
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_config, &dev_handle));
+
+    return i2c_master_probe(bus_handle, BMI270_ADDR, 100);
 }
 
+
+// ✅ KEEP THIS (fine as-is)
 void i2c_bus_recovery() {
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << I2C_MASTER_SCL_IO),
@@ -60,7 +73,6 @@ void i2c_bus_recovery() {
     };
     gpio_config(&io_conf);
 
-    // Pulse SCL 9 times to clear any stuck state in the IMU
     for (int i = 0; i < 9; i++) {
         gpio_set_level((gpio_num_t)I2C_MASTER_SCL_IO, 0);
         vTaskDelay(pdMS_TO_TICKS(5));
@@ -71,59 +83,53 @@ void i2c_bus_recovery() {
 
 void sensorSetup()
 {
-    // Give the sensor a massive 3-second head start to boot its internal controller
     vTaskDelay(pdMS_TO_TICKS(3000)); 
 
-	i2c_bus_recovery();
-    
+    i2c_bus_recovery();
     i2c_bus_init();
 
     bmi = std::make_unique<espp::Bmi270<espp::bmi270::Interface::I2C>>(bmi_config);
     
-    // Loop several times to give the sensor a chance to respond
     for (int i = 0; i < 5; i++) {
         if (bmi->init(ec)) {
             bmiReady = true;
-            ESP_LOGI("BMI270", "SUCCESS! Sensor is alive on Battery.");
+            ESP_LOGI("BMI270", "SUCCESS! Sensor is alive.");
             break; 
         }
-        ESP_LOGW("BMI270", "Init attempt %d failed: %s. Retrying...", i+1, ec.message().c_str());
+        ESP_LOGW("BMI270", "Init attempt %d failed: %s", i+1, ec.message().c_str());
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     if (!bmiReady) {
-        ESP_LOGE("BMI270", "CRITICAL: Could not find sensor. Check battery voltage!");
-        return;
+        ESP_LOGE("BMI270", "CRITICAL: Could not find sensor!");
     }
 }
-
-
 
 IMUData getSensorData()
 {
-    if(bmiReady)
+    if (bmiReady)
     {
-        float dt = 1.0f; // Note: Use actual timing if doing balance math later!
-		auto start = esp_timer_get_time();
+        float dt = 1.0f;
+        auto start = esp_timer_get_time();
+
         if (bmi->update(dt, ec)) {
             auto accel = bmi->get_accelerometer();
             auto gyro = bmi->get_gyroscope();
+
             printf("Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
-                accel.x, accel.y, accel.z, gyro.x, gyro.y, gyro.z);
+                accel.x, accel.y, accel.z,
+                gyro.x, gyro.y, gyro.z);
 
-			auto elapsed = esp_timer_get_time() - start;
-			fmt::print("Update time: {} µs\n", elapsed);
+            auto elapsed = esp_timer_get_time() - start;
+            printf("Update time: %lld us\n", elapsed);
 
-            IMUData returnedData;
-            returnedData.ax = accel.x;
-            returnedData.ay = accel.y;
-            returnedData.az = accel.z;
-            returnedData.gx = gyro.x;
-            returnedData.gy = gyro.y;
-            returnedData.gz = gyro.z;
-
-            return returnedData;
+            return {
+                accel.x, accel.y, accel.z,
+                gyro.x, gyro.y, gyro.z
+            };
         }
     }
-    return IMUData();
+    return {};
 }
+
+// ... rest of your sensorSetup() and getSensorData() functions ...

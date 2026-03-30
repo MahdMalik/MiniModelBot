@@ -34,7 +34,7 @@
 #include "driver/uart.h"
 #include "esp_heap_caps.h"
 #include "PrintFunctions.h"
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 
 struct IMUData {
     float ax, ay, az;
@@ -43,7 +43,7 @@ struct IMUData {
 
 extern bool bmiReady;
 
-void i2c_bus_init();
+esp_err_t i2c_bus_init();
 
 void i2c_bus_recovery();
 

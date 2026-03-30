@@ -85,20 +85,22 @@ extern "C" void app_main(void) {
         return;
     }
 	
-	currentDirection[0] = 2;
-	currentDirection[1] = -2;
-	move(false);
-	for(int i = 2; i < 100; i++)
-	{
-		currentDirection[0] = i;
-		currentDirection[1] = -i;
-		move(false);
-		vTaskDelay(pdMS_TO_TICKS(50));
-	}
+	// currentDirection[0] = 2;
+	// currentDirection[1] = -2;
+	// move(false);
+	// for(int i = 2; i < 100; i++)
+	// {
+	// 	currentDirection[0] = i;
+	// 	currentDirection[1] = -i;
+	// 	move(false);
+	// 	vTaskDelay(pdMS_TO_TICKS(50));
+	// }
 
 	IMUData newData = getSensorData();
 
     vTaskDelay(pdMS_TO_TICKS(10000));
+	
+	ESP_LOGI("INFO", "it worked out!");
 
     // Just launch the task and let it run
     
