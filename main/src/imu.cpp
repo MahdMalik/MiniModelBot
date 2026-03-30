@@ -1,8 +1,8 @@
 #include "imu.h"
 #include "driver/i2c_master.h"
 
-#define I2C_MASTER_SCL_IO           5
-#define I2C_MASTER_SDA_IO           4
+#define I2C_MASTER_SCL_IO           41
+#define I2C_MASTER_SDA_IO           42
 #define I2C_MASTER_NUM              I2C_NUM_1 // Try Port 1 to avoid Cam Port 0 conflicts
 #define I2C_MASTER_FREQ_HZ          100000
 #define BMI270_ADDR                 0x68
@@ -11,19 +11,19 @@ bool bmiReady = false;
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t dev_handle;
 
-// 🔧 BMI CONFIG (Aligned with espp docs)
+// 🔧 Use the logic from your "Working" code
 espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
     .device_address = BMI270_ADDR,
-    .write = [](uint8_t reg, const uint8_t *data, size_t len) {
-        uint8_t buffer[len + 1];
-        buffer[0] = reg;
-        memcpy(&buffer[1], data, len);
-        esp_err_t err = i2c_master_transmit(dev_handle, buffer, len + 1, -1);
-        return err == ESP_OK; // espp expects bool
+    .write = [](uint8_t dev_addr, const uint8_t *data, size_t len) {
+        // Do NOT manually add the register byte; espp already put it in 'data'
+        esp_err_t err = i2c_master_transmit(dev_handle, data, len, pdMS_TO_TICKS(1000));
+        ets_delay_us(100); 
+        return err == ESP_OK;
     },
-    .read = [](uint8_t reg, uint8_t *data, size_t len) {
-        esp_err_t err = i2c_master_transmit_receive(dev_handle, &reg, 1, data, len, -1);
-        return err == ESP_OK; // espp expects bool
+    .read = [](uint8_t dev_addr, uint8_t *data, size_t len) {
+        // Use raw receive like your working version
+        esp_err_t err = i2c_master_receive(dev_handle, data, len, pdMS_TO_TICKS(1000));
+        return err == ESP_OK;
     }
 };
 
