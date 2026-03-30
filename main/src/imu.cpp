@@ -3,7 +3,7 @@
 
 #define I2C_MASTER_SCL_IO           41
 #define I2C_MASTER_SDA_IO           42
-#define I2C_MASTER_NUM              I2C_NUM_1 // Try Port 1 to avoid Cam Port 0 conflicts
+#define I2C_MASTER_NUM              I2C_NUM_0 // Try Port 1 to avoid Cam Port 0 conflicts
 #define I2C_MASTER_FREQ_HZ          100000
 #define BMI270_ADDR                 0x68
 

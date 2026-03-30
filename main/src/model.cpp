@@ -6,8 +6,8 @@ bool modelSetupFailed = false;
 extern const unsigned char modelWeights[];
 extern const unsigned int modelLen;
 
-const int tensorMemorySize = 190000;
-uint8_t tensorMemoryArea[tensorMemorySize];
+uint8_t* tensorMemoryArea = nullptr; 
+const int tensorMemorySize = 350 * 1024; // 300KB - plenty of room in PSRAM
 
 const tflite::Model* model = nullptr;
 static tflite::MicroMutableOpResolver<5> operationsManager;
@@ -19,6 +19,14 @@ int32_t theOutputZeroPoint;
 
 void setupModel()
 {
+    tensorMemoryArea = (uint8_t*)heap_caps_malloc(tensorMemorySize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+
+    if (tensorMemoryArea == nullptr) {
+        CustomPrint("MODEL", "PSRAM Allocation failed! Is PSRAM enabled in menuconfig?");
+        modelSetupFailed = true;
+        return;
+    }
+    
     model = tflite::GetModel(modelWeights);
 
     // have to check the model version matches what the library expecsts
@@ -63,6 +71,8 @@ void setupModel()
     
     if(!modelSetupFailed)
     {
+        theOutputScale = interpreter->output(0)->params.scale;
+        theOutputZeroPoint = interpreter->output(0)->params.zero_point;
         CustomPrint("MODEL", "thing worked out ok regarding the model!");
         
         // i want to see how much memory is left too
@@ -73,9 +83,6 @@ void setupModel()
 
         CustomPrint("MEMORY", "Amount of used RAM is %.2f%%\n", percentUsed);
     }
-
-    theOutputScale = interpreter->output(0)->params.scale;
-    theOutputZeroPoint = interpreter->output(0)->params.zero_point;
 
     CustomPrint("MODEL", "The output scaling factor is %f\n", theOutputScale);
     CustomPrint("MODEL", "The output zero point number is actually %d\n", theOutputZeroPoint);

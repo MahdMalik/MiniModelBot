@@ -55,7 +55,7 @@
 #define FADE_RESOLUTION			10
 
 static uint8_t s_led_state = 0;
-bool usingModel = false;
+bool usingModel = true;
 
 //just quickly putting the on-chip LED to high
 void doBlink()
@@ -77,7 +77,7 @@ extern "C" void app_main(void) {
 		setupModel();
 	}
     ledc_setup();
-	doBlink();
+	// doBlink();
 
 
     if(!bmiReady || gotError || modelSetupFailed)
@@ -98,7 +98,9 @@ extern "C" void app_main(void) {
 
 	IMUData newData = getSensorData();
 
-    vTaskDelay(pdMS_TO_TICKS(10000));
+    for (int i = 0; i < 100; i++) {
+		vTaskDelay(pdMS_TO_TICKS(100)); // 100ms * 100 = 10 seconds
+	}
 	
 	ESP_LOGI("INFO", "it worked out!");
 
