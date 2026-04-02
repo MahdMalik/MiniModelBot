@@ -3,5 +3,5 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
-  "cmake.sourceDirectory": "/home/debangshup/Programming/researchProjects/MiniModelBot/hello_world"
+  "cmake.sourceDirectory": "/home/debangshup/Programming/researchProjects/MiniModelBot/code_for_robot"
 }
