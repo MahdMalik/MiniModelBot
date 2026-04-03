@@ -105,8 +105,9 @@ extern "C" void app_main(void) {
 	ESP_LOGI("INFO", "it worked out!");
 
     // Just launch the task and let it run
-		
+		ESP_LOGI("INFO", "Hopefully, something happened to the model");
     
     // app_main can now just chill or handle other things (like WiFi/HTTP)
-    while(1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
+    while(1) { vTaskDelay(pdMS_TO_TICKS(1000)); 
+		modelCall();}
 }

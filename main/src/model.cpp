@@ -7,7 +7,7 @@ extern const unsigned char modelWeights[];
 extern const unsigned int modelLen;
 
 uint8_t* tensorMemoryArea = nullptr; 
-const int tensorMemorySize = 350 * 1024; // 300KB - plenty of room in PSRAM
+const int tensorMemorySize = 150 * 1024; // 300KB - plenty of room in PSRAM
 
 const tflite::Model* model = nullptr;
 static tflite::MicroMutableOpResolver<5> operationsManager;
@@ -57,17 +57,28 @@ void setupModel()
         model, operationsManager, tensorMemoryArea, tensorMemorySize
     );
 
-    // Allocate memory from the tensor_arena for the model's tensors.
-    TfLiteStatus checkAllocationSuccess = interpreter->AllocateTensors();
-    if (checkAllocationSuccess != kTfLiteOk) 
-    {
-        CustomPrint("MODEL", "AllocateTensors() failed");
-        modelSetupFailed = true;
-    }
-    else
-    {
-        CustomPrint("MODEL", "Allocate tensors success");
-    }
+   // Allocate memory from the tensor_arena
+TfLiteStatus checkAllocationSuccess = interpreter->AllocateTensors();
+
+// Check how much memory is actually being used
+size_t used_bytes = interpreter->arena_used_bytes();
+
+if (checkAllocationSuccess != kTfLiteOk) 
+{
+    // If it fails, print the size you attempted to use vs. the arena size
+    char buf[128];
+    sprintf(buf, "AllocateTensors() failed. Used: %d bytes, Arena Size: %d", 
+            used_bytes, tensorMemorySize);
+    CustomPrint("MODEL", buf);
+    
+    modelSetupFailed = true;
+}
+else
+{
+    char buf[128];
+    sprintf(buf, "Success! Used: %d bytes of %d", used_bytes, tensorMemorySize);
+    CustomPrint("MODEL", buf);
+}
     
     if(!modelSetupFailed)
     {
