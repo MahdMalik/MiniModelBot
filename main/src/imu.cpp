@@ -10,9 +10,11 @@
 bool bmiReady = false;
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t dev_handle;
+//using type alias to reduce error
+using RobotIMU = espp::Bmi270<espp::bmi270::Interface::I2C>;
 
-// 🔧 Use the logic from your "Working" code
-espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
+//  Use the logic from your "Working" code
+RobotIMU::Config bmi_config = {
     .device_address = BMI270_ADDR,
     .write = [](uint8_t dev_addr, const uint8_t *data, size_t len) {
         // Do NOT manually add the register byte; espp already put it in 'data'
@@ -27,7 +29,7 @@ espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
     }
 };
 
-std::unique_ptr<espp::Bmi270<espp::bmi270::Interface::I2C>> bmi;
+std::unique_ptr<RobotIMU> bmi;
 std::error_code ec;
 
 esp_err_t i2c_bus_init() {
@@ -64,7 +66,7 @@ esp_err_t i2c_bus_init() {
 }
 
 
-// ✅ KEEP THIS (fine as-is)
+// KEEP THIS (fine as-is)
 void i2c_bus_recovery() {
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << I2C_MASTER_SCL_IO),
@@ -88,7 +90,7 @@ void sensorSetup()
     i2c_bus_recovery();
     i2c_bus_init();
 
-    bmi = std::make_unique<espp::Bmi270<espp::bmi270::Interface::I2C>>(bmi_config);
+    bmi = std::make_unique<RobotIMU>(bmi_config);
     
     for (int i = 0; i < 5; i++) {
         if (bmi->init(ec)) {
