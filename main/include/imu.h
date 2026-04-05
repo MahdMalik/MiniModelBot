@@ -41,7 +41,7 @@ struct IMUData {
     float gx, gy, gz;
 };
 
-extern bool bmiReady;
+extern bool isBmiReady;
 
 esp_err_t i2c_bus_init();
 

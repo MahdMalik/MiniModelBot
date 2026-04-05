@@ -81,7 +81,7 @@ extern "C" void app_main(void) {
 
 
 	//should retry if not ready, 
-    if(!bmiReady || gotError || modelSetupFailed)
+    if(!isBmiReady || gotError || modelSetupFailed)
     {
         return;
     }
