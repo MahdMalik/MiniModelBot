@@ -149,7 +149,7 @@ double getInstantVelocity(double previous_time){
 
     //checks if the imu was able to update successfully 
     if (!imu->update(dt, ec)){
-        printf("IMU could not update");
+        printf("IMU could not update its values");
         return {};
     }
 
@@ -157,8 +157,8 @@ double getInstantVelocity(double previous_time){
     auto current_time = esp_timer_get_time();
     auto y_accel = imu->get_accelerometer().y;
 
-    //vfinal = acceleration *dt + v0;
-    auto current_velocity= y_accel * (current_time-previous_time) + previous_velocity;
+    //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
+    auto current_velocity= y_accel * (current_time-previous_time)*(10000) + previous_velocity;
 
     previous_velocity = current_velocity;
 
