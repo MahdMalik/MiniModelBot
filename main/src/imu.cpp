@@ -12,8 +12,8 @@ static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t dev_handle;
 //using type alias to reduce error
 using RobotIMU = espp::Bmi270<espp::bmi270::Interface::I2C>;
+double velocityInit=0;
 
-//  Use the logic from your "Working" code
 RobotIMU::Config bmi_config = {
     .device_address = BMI270_ADDR,
     .write = [](uint8_t dev_addr, const uint8_t *data, size_t len) {
@@ -23,7 +23,6 @@ RobotIMU::Config bmi_config = {
         return err == ESP_OK;
     },
     .read = [](uint8_t dev_addr, uint8_t *data, size_t len) {
-        // Use raw receive like your working version
         esp_err_t err = i2c_master_receive(dev_handle, data, len, pdMS_TO_TICKS(1000));
         return err == ESP_OK;
     }
@@ -66,7 +65,6 @@ esp_err_t i2c_bus_init() {
 }
 
 
-// KEEP THIS (fine as-is)
 void i2c_bus_recovery() {
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << I2C_MASTER_SCL_IO),
@@ -134,4 +132,21 @@ IMUData getSensorData()
     return {};
 }
 
+// precondition: sensor setup
+IMUData getInstantVelocity(){
+    float dt = 1.0f;
+
+    //checks if the imu is initialized before called
+     if (!bmiReady) {
+        printf("Bmi was not initialized with Sensor Setup");
+        return {};
+    }
+
+    //checks if the imu was able to go successfully 
+    if (bmi->update(dt, ec)){
+        auto t0 = esp_timer_get_time();
+        auto a = bmi->get_accelerometer();
+    }
+
+}
 // ... rest of your sensorSetup() and getSensorData() functions ...
