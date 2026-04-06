@@ -54,6 +54,9 @@
 
 #define FADE_RESOLUTION			10
 
+#include "headless_model.h"
+#include "headless_model_data.h"
+
 static uint8_t s_led_state = 0;
 bool usingModel = true;
 
@@ -74,7 +77,11 @@ extern "C" void app_main(void) {
 	cameraInit();
 	if(usingModel)
 	{
+		connectHeadlessModel(g_model, g_model_len);
 		setupModel();
+
+		if (isHeadless)
+		//	customHead.init();  // idk headless model output shape
 	}
     ledc_setup();
 	// doBlink();
@@ -105,9 +112,16 @@ extern "C" void app_main(void) {
 	ESP_LOGI("INFO", "it worked out!");
 
     // Just launch the task and let it run
-		ESP_LOGI("INFO", "Hopefully, something happened to the model");
+	ESP_LOGI("INFO", "Hopefully, something happened to the model");
     
     // app_main can now just chill or handle other things (like WiFi/HTTP)
     while(1) { vTaskDelay(pdMS_TO_TICKS(1000)); 
-		modelCall();}
+		if (usingModel)
+		{
+			modelCall();
+
+			// Uncomment when you have a label source (button, serial, MQTT, etc.)
+			// modelLearn(trueLabel);
+		}
+	}
 }
