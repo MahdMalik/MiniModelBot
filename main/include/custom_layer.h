@@ -34,7 +34,7 @@ struct DenseLayer{
   void initFromLoadedModel(int inSize, int outSize);
   void initRandom(int inSize, int outSize);
   vector<float> forward(const vector<float> &input, bool isLastLayer = false);
-  void backward(const vector<float> &input, const vector<float> &output, const vector<float> &gradOutput, float loss);
+  void backward(const vector<float> &input, const vector<float> &output, const vector<float> &gradOutput);
   bool saveToNVS(const char* key);
   bool loadFromNVS(const char* key);
 };

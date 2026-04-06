@@ -146,24 +146,23 @@ vector<float> DenseLayer::forward(const vector<float> &input, bool isLastLayer){
   lastHidden = layer1.forward(features, false);
   return layer2.forward(lastHidden, true);
 }
-void DenseLayer::backward(const vector<float>& input, const vector<float>& output, const vector<float>& gradOutput, float loss) {
+void DenseLayer::backward(const vector<float>& input, const vector<float>& output, const vector<float>& gradOutput) {
     timestep++;
     float bc1 = 1.0f - powf(beta1, (float)timestep);
     float bc2 = 1.0f - powf(beta2, (float)timestep);
 
     for (int o = 0; o < outputSize; o++) {
       float actGrad = (output[o] > 0.0f) ? gradOutput[o] : 0.0f;
-      // Scale gradient by loss — bigger mistake, bigger update
-      if(loss != 0.0f){
-        actGrad *= loss;
-      }
-        
+      
+      // Reflect Adam Equation...
+      // https://www.geeksforgeeks.org/deep-learning/adam-optimizer/
       m_b[o] = beta1 * m_b[o] + (1.0f - beta1) * actGrad;
       v_b[o] = beta2 * v_b[o] + (1.0f - beta2) * actGrad * actGrad;
       float m_b_hat = m_b[o] / bc1;
       float v_b_hat = v_b[o] / bc2;
+      // Update the biases
       biases[o] -= learningRate * m_b_hat / (sqrtf(v_b_hat) + epsilon);
-
+      // Iteratively update the weights (each layer has 1 bias and multiple weights...)
       for (int i = 0; i < inputSize; i++) {
         float grad_w = actGrad * input[i];
         int   idx    = o * inputSize + i;
@@ -244,7 +243,7 @@ void CustomHead::backward(const vector<float>& features, const vector<float>& pr
         for (int o = 0; o < layer2.outputSize; o++)
             gradH[i] += layer2.weights[o * layer2.inputSize + i] * gradLayer2[o];
 
-    layer2.backward(lastHidden, lastHidden, gradLayer2, loss);
+    layer2.backward(lastHidden, probs, gradLayer2);
     layer1.backward(features, lastHidden, gradH);
     
 // Just put the forward passes and backward passes together
