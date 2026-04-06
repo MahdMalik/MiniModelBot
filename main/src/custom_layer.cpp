@@ -3,90 +3,181 @@
 #include <cstring>
 #include <cstdlib>
 #include "esp_log.h"
+#include "model_data.h"
+#include <tensorflow/lite/micro/micro_interpreter.h>
+#include <tensorflow/lite/schema/schema_generated.h>
 using namespace std;
 
 static const char* TAG = "CUSTOM_LAYER";
-
 CustomHead customHead;
 
-// ─── Math helpers ────────────────────────────────────────────────────────────
-
-static float sigmoid(float x) {
-    return 1.0f / (1.0f + expf(-x));
+float BCE_Loss(const vector<float>& probs, int label){
+  // Clamp to avoid log(0)
+  float p = max(1e-7f, min(1.0f - 1e-7f, probs[label]));
+  return -logf(p);
 }
 
-static float relu(float x) {
-    return x > 0.0f ? x : 0.0f;
+// Math helpers
+static float sigmoid(float x){
+  return 1.0f / (1.0f + exp(-x));
 }
-
+static float relu(float x){
+  return x > 0.0f ? x : 0.0f;
+}
 // Xavier uniform initialization
 static float xavierRand(int fanIn, int fanOut) {
-    float limit = sqrtf(6.0f / (fanIn + fanOut));
-    return ((float)rand() / RAND_MAX) * 2.0f * limit - limit;
+  float limit = sqrtf(6.0f / (fanIn + fanOut));
+  return ((float)rand() / RAND_MAX) * 2.0f * limit - limit;
 }
+// Create the initialize methods...
 
-// ─── DenseLayer ──────────────────────────────────────────────────────────────
+// This method is the one that allocates all the space for the weight and bias vectors
+// USED in other init() methods...
+void DenseLayer::init(int inSize, int outSize){
+  inputSize = inSize;
+  outputSize = outSize;
 
-void DenseLayer::init(int inSize, int outSize) {
-    inputSize  = inSize;
-    outputSize = outSize;
-
-    weights.assign(outputSize * inputSize, 0.0f);
-    biases.assign(outputSize, 0.0f);
-    m_w.assign(outputSize * inputSize, 0.0f);
-    v_w.assign(outputSize * inputSize, 0.0f);
-    m_b.assign(outputSize, 0.0f);
-    v_b.assign(outputSize, 0.0f);
+  weights.assign(outputSize * inputSize, 0.0f);
+  biases.assign(outputSize, 0.0f);
+  m_w.assign(outputSize * inputSize, 0.0f);
+  v_w.assign(outputSize * inputSize, 0.0f);
+  m_b.assign(outputSize, 0.0f);
+  v_b.assign(outputSize, 0.0f);
 }
+// Initialize the layer with the activation values of the last layer from the .tflite file...
+void DenseLayer::initFromLoadedModel(int inSize, int outSize) {
+  inputSize  = inSize;
+  outputSize = outSize;
 
-void DenseLayer::initRandom() {
-    for (auto& w : weights)
-        w = xavierRand(inputSize, outputSize);
-    // biases stay zero
-}
+  m_w.assign(outSize * inSize, 0.0f);
+  v_w.assign(outSize * inSize, 0.0f);
+  m_b.assign(outSize, 0.0f);
+  v_b.assign(outSize, 0.0f);
+  timestep = 0;
 
-vector<float> DenseLayer::forward(const vector<float>& input) {
-    vector<float> out(outputSize, 0.0f);
-    for (int o = 0; o < outputSize; o++) {
-        float sum = biases[o];
-        for (int i = 0; i < inputSize; i++)
-            sum += weights[o * inputSize + i] * input[i];
-        out[o] = relu(sum);  // use sigmoid in the final layer instead
+  const tflite::Model* loadedModel = tflite::GetModel(modelWeights);
+
+  if(loadedModel->version() != TFLITE_SCHEMA_VERSION) {
+    ESP_LOGE(TAG, "Schema version mismatch!");
+    initRandom(inSize, outSize);
+    return;
+  }
+
+  const tflite::SubGraph* subgraph = loadedModel->subgraphs()->Get(0);
+  if(subgraph == nullptr) {
+    ESP_LOGE(TAG, "No subgraph found!");
+    initRandom(inSize, outSize);
+    return;
+  }
+
+  // Get the last operator in the subgraph — that's our final layer
+  int lastOpIndex = subgraph->operators()->size() - 1;
+  const tflite::Operator* lastOp = subgraph->operators()->Get(lastOpIndex);
+
+  // For a FullyConnected layer: inputs[0]=input, inputs[1]=weights, inputs[2]=biases
+  int weightTensorIndex = lastOp->inputs()->Get(1);
+  int biasTensorIndex   = lastOp->inputs()->Get(2);
+
+  // ── Extract weights ──
+  const tflite::Tensor* weightTensor = subgraph->tensors()->Get(weightTensorIndex);
+  const tflite::Buffer* weightBuffer = loadedModel->buffers()->Get(weightTensor->buffer());
+
+  if(weightBuffer == nullptr || weightBuffer->data() == nullptr) {
+    ESP_LOGE(TAG, "Weight buffer is empty!");
+    initRandom(inSize, outSize);
+    return;
+  }
+
+  const int8_t* rawWeights = reinterpret_cast<const int8_t*>(weightBuffer->data()->data());
+  float wScale = weightTensor->quantization()->scale()->Get(0);
+  int wZeroPoint = weightTensor->quantization()->zero_point()->Get(0);
+  int numWeights = weightBuffer->data()->size();
+
+  if(numWeights != inSize * outSize) {
+    ESP_LOGE(TAG, "Weight size mismatch! Got %d, expected %d", numWeights, inSize * outSize);
+    initRandom(inSize, outSize);
+    return;
+  }
+
+  vector<float> loadedWeights(numWeights);
+  for (int i = 0; i < numWeights; i++)
+    loadedWeights[i] = (rawWeights[i] - wZeroPoint) * wScale;
+    weights = move(loadedWeights);
+
+    // ── Extract biases ──
+    const tflite::Tensor* biasTensor = subgraph->tensors()->Get(biasTensorIndex);
+    const tflite::Buffer* biasBuffer = loadedModel->buffers()->Get(biasTensor->buffer());
+
+    if (biasBuffer == nullptr || biasBuffer->data() == nullptr) {
+        ESP_LOGE(TAG, "Bias buffer is empty!");
+        biases.assign(outSize, 0.0f);
+        return;
     }
-    return out;
-}
 
-// gradOutput: dLoss/dOutput for each output neuron
-void DenseLayer::backward(const vector<float>& input,
-                           const vector<float>& output,
-                           const vector<float>& gradOutput) {
+    const int32_t* rawBiases = reinterpret_cast<const int32_t*>(biasBuffer->data()->data());
+    float bScale     = biasTensor->quantization()->scale()->Get(0);
+    int   bZeroPoint = biasTensor->quantization()->zero_point()->Get(0);
+    int   numBiases  = biasBuffer->data()->size() / sizeof(int32_t);
+
+    if (numBiases != outSize) {
+        ESP_LOGE(TAG, "Bias size mismatch! Got %d, expected %d", numBiases, outSize);
+        biases.assign(outSize, 0.0f);
+        return;
+    }
+
+    vector<float> loadedBiases(numBiases);
+    for (int i = 0; i < numBiases; i++)
+        loadedBiases[i] = (rawBiases[i] - bZeroPoint) * bScale;
+    biases = move(loadedBiases);
+
+    ESP_LOGI(TAG, "Loaded last layer weights [%d] and biases [%d] from model", numWeights, numBiases);
+}
+// Initialize the layer with random values: use when not loading from flashed c-array model
+void DenseLayer::initRandom(int inSize, int outSize){
+  init(inSize, outSize);
+  for(auto &w: weights){
+    // Weights are randomized
+    w = xavierRand(inputSize, outputSize);
+    // biases are kept to 0
+  }
+}
+// Create a method to pass forth the output...
+vector<float> DenseLayer::forward(const vector<float> &input, bool isLastLayer){
+  lastHidden = layer1.forward(features, false);
+  return layer2.forward(lastHidden, true);
+}
+void DenseLayer::backward(const vector<float>& input, const vector<float>& output, const vector<float>& gradOutput, float loss) {
     timestep++;
-    float bc1 = 1.0f - powf(beta1, timestep);
-    float bc2 = 1.0f - powf(beta2, timestep);
+    float bc1 = 1.0f - powf(beta1, (float)timestep);
+    float bc2 = 1.0f - powf(beta2, (float)timestep);
 
     for (int o = 0; o < outputSize; o++) {
-        // ReLU derivative
-        float actGrad = (output[o] > 0.0f) ? gradOutput[o] : 0.0f;
+      float actGrad = (output[o] > 0.0f) ? gradOutput[o] : 0.0f;
+      // Scale gradient by loss — bigger mistake, bigger update
+      if(loss != 0.0f){
+        actGrad *= loss;
+      }
+        
+      m_b[o] = beta1 * m_b[o] + (1.0f - beta1) * actGrad;
+      v_b[o] = beta2 * v_b[o] + (1.0f - beta2) * actGrad * actGrad;
+      float m_b_hat = m_b[o] / bc1;
+      float v_b_hat = v_b[o] / bc2;
+      biases[o] -= learningRate * m_b_hat / (sqrtf(v_b_hat) + epsilon);
 
-        // Bias update (Adam)
-        m_b[o] = beta1 * m_b[o] + (1 - beta1) * actGrad;
-        v_b[o] = beta2 * v_b[o] + (1 - beta2) * actGrad * actGrad;
-        biases[o] -= learningRate * (m_b[o] / bc1) / (sqrtf(v_b[o] / bc2) + epsilon);
+      for (int i = 0; i < inputSize; i++) {
+        float grad_w = actGrad * input[i];
+        int   idx    = o * inputSize + i;
 
-        for (int i = 0; i < inputSize; i++) {
-            float grad_w = actGrad * input[i];
-            int idx = o * inputSize + i;
-
-            // Weight update (Adam)
-            m_w[idx] = beta1 * m_w[idx] + (1 - beta1) * grad_w;
-            v_w[idx] = beta2 * v_w[idx] + (1 - beta2) * grad_w * grad_w;
-            weights[idx] -= learningRate * (m_w[idx] / bc1) / (sqrtf(v_w[idx] / bc2) + epsilon);
-        }
+        m_w[idx] = beta1 * m_w[idx] + (1.0f - beta1) * grad_w;
+        v_w[idx] = beta2 * v_w[idx] + (1.0f - beta2) * grad_w * grad_w;
+        float m_w_hat = m_w[idx] / bc1;
+        float v_w_hat = v_w[idx] / bc2;
+        weights[idx] -= learningRate * m_w_hat / (sqrtf(v_w_hat) + epsilon);
+      }
     }
+    ESP_LOGI(TAG, "BCE Loss: %.4f", loss);
 }
-
-// ─── NVS Persistence ─────────────────────────────────────────────────────────
-
+// NVS Persistence: save to NVS
 bool DenseLayer::saveToNVS(const char* key) {
     nvs_handle_t handle;
     esp_err_t err = nvs_open("ml_weights", NVS_READWRITE, &handle);
@@ -127,80 +218,46 @@ bool DenseLayer::loadFromNVS(const char* key) {
     return ok;
 }
 
-// ─── CustomHead ──────────────────────────────────────────────────────────────
-
-void CustomHead::init(int featureSize) {
-    layer1.init(featureSize, 32);
-    layer2.init(32, 2);  // 2 output classes
-
-    // Try loading from NVS; fall back to random init
-    if (!layer1.loadFromNVS("l1")) layer1.initRandom();
-    if (!layer2.loadFromNVS("l2")) layer2.initRandom();
+// CustomHead methods
+void CustomHead::init(int featureSize){
+  layer1.initFromLoadedModel(featureSize, 32);
+  layer2.initRandom(32, 2);
+  
+  // Try loading from NVS; fall back to random init
+  if (!layer1.loadFromNVS("l1")) layer1.initRandom();
+  if (!layer2.loadFromNVS("l2")) layer2.initRandom();
 }
-
-std::vector<float> CustomHead::forward(const std::vector<float>& features) {
-    auto h = layer1.forward(features);
-
-    // Final layer: sigmoid instead of relu for probabilities
-    std::vector<float> out(layer2.outputSize, 0.0f);
-    for (int o = 0; o < layer2.outputSize; o++) {
-        float sum = layer2.biases[o];
-        for (int i = 0; i < layer2.inputSize; i++)
-            sum += layer2.weights[o * layer2.inputSize + i] * h[i];
-        out[o] = sigmoid(sum);
-    }
-    return out;
+// Forward: forward through layer 1, then forward through layer 2...
+vector<float> CustomHead::forward(const vector<float>& features) {
+  vector<float> logits = layer1.forward(features);
+  return layer2.forward(logits);
 }
+// Just calculate the overall loss, then backpropogate through each of the individual dense layers
+void CustomHead::backward(const vector<float>& features, const vector<float>& probs, int label) {
+  float loss = BCE_Loss(probs, label);
+  vector<float> gradLayer2(layer2.outputSize);
+  for (int o = 0; o < layer2.outputSize; o++)
+    gradLayer2[o] = probs[o] - (o == label ? 1.0f : 0.0f);
 
-void CustomHead::train(const std::vector<float>& features, int label) {
-    // ── Forward pass ──
-    auto h = layer1.forward(features);
-
-    std::vector<float> logits(layer2.outputSize, 0.0f);
-    for (int o = 0; o < layer2.outputSize; o++) {
-        float sum = layer2.biases[o];
-        for (int i = 0; i < layer2.inputSize; i++)
-            sum += layer2.weights[o * layer2.inputSize + i] * h[i];
-        logits[o] = sum;
-    }
-
-    // Softmax
-    float maxLogit = *std::max_element(logits.begin(), logits.end());
-    std::vector<float> probs(layer2.outputSize);
-    float sumExp = 0.0f;
-    for (int o = 0; o < layer2.outputSize; o++) {
-        probs[o] = expf(logits[o] - maxLogit);
-        sumExp += probs[o];
-    }
-    for (auto& p : probs) p /= sumExp;
-
-    // ── Loss: cross-entropy gradient ──
-    // dL/d(logit_o) = prob_o - 1{o == label}
-    std::vector<float> gradLayer2(layer2.outputSize);
-    for (int o = 0; o < layer2.outputSize; o++)
-        gradLayer2[o] = probs[o] - (o == label ? 1.0f : 0.0f);
-
-    // ── Backward: layer2 ──
-    // Compute gradient w.r.t. layer1's output before layer2 backward modifies weights
-    std::vector<float> gradH(layer2.inputSize, 0.0f);
+    vector<float> gradH(layer2.inputSize, 0.0f);
     for (int i = 0; i < layer2.inputSize; i++)
         for (int o = 0; o < layer2.outputSize; o++)
             gradH[i] += layer2.weights[o * layer2.inputSize + i] * gradLayer2[o];
 
-    layer2.backward(h, h /* unused for linear */, gradLayer2);
-
-    // ── Backward: layer1 (ReLU grad applied inside backward()) ──
-    layer1.backward(features, h, gradH);
-
-    ESP_LOGI(TAG, "Trained on label %d | p[0]=%.3f p[1]=%.3f",
-             label, probs[0], probs[1]);
+    layer2.backward(lastHidden, lastHidden, gradLayer2, loss);
+    layer1.backward(features, lastHidden, gradH);
+    
+// Just put the forward passes and backward passes together
+void CustomHead::train(const std::vector<float>& features, int label) {
+  auto probs = forward(features);   // caches lastHidden internally
+  backward(features, probs, label); // uses lastHidden from cache
 }
-
+// Save the customHead: just save both its layers
 void CustomHead::save() {
     layer1.saveToNVS("l1");
     layer2.saveToNVS("l2");
 }
-
+// Load the customHead: just load both its layers...
 void CustomHead::load() {
     layer1.loadFromNVS("l1");
     layer2.loadFromNVS("l2");

@@ -1,7 +1,6 @@
 #include "model.h"
-#include "headless_model_data.h"
 #include "headless_model.h"
-//#include "custom_layer.h"
+#include "custom_layer.h"
 
 #define modelWeights g_model
 #define modelLen g_model_len
@@ -53,7 +52,7 @@ std::vector<float> extractFeatures()
 void setupModel()
 {
     tensorMemoryArea = (uint8_t*)heap_caps_malloc(tensorMemorySize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
+    customHead = CustomHead(32);
     if (tensorMemoryArea == nullptr) {
         CustomPrint("MODEL", "PSRAM Allocation failed! Is PSRAM enabled in menuconfig?");
         modelSetupFailed = true;

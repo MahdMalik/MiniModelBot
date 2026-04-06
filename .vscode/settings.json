@@ -7,5 +7,6 @@
     "IDF_TARGET": "esp32s3"
   },
   "idf.port": "/dev/ttyUSB0",
-  "idf.currentSetup": "/home/debangshup/.espressif/v5.5.3/esp-idf"
+  "idf.currentSetup": "/home/debangshup/.espressif/v5.5.3/esp-idf",
+  "C_Cpp.errorSquiggles": "disabled"
 }
