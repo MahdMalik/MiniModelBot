@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rom/ets_sys.h"
 #include "esp_log.h"
 #include "esp_err.h"

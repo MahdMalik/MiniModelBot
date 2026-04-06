@@ -164,5 +164,3 @@ double getInstantVelocity(double previous_time){
 
     return current_velocity;
 }
-
-
