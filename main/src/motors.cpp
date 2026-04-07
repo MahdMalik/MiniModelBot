@@ -6,10 +6,10 @@
 #define LEDC_FREQUENCY  50 // Frequency in Hertz. Set frequency at 4 kHz
 
 //YELLOW IS LEFT MOTOR, WHITE IS RIGHT MOTOR
-#define LEFT_FRONT_MOTOR_PIN    GPIO_NUM_1 // Define the output GPIO
+#define LEFT_FRONT_MOTOR_PIN    GPIO_NUM_2 // Define the output GPIO
 #define LEFT_BACK_MOTOR_PIN     GPIO_NUM_2 // Define the output GPIO
-#define RIGHT_FRONT_MOTOR_PIN	GPIO_NUM_40 // Define the output GPIO
-#define RIGHT_BACK_MOTOR_PIN	GPIO_NUM_39 // Define the output GPIO
+#define RIGHT_FRONT_MOTOR_PIN	GPIO_NUM_39 // Define the output GPIO
+#define RIGHT_BACK_MOTOR_PIN	GPIO_NUM_40 // Define the output GPIO
 
 
 #define LEDC_CHANNEL_LEFT_FRONT          LEDC_CHANNEL_0
