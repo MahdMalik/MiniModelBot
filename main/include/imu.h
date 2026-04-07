@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rom/ets_sys.h"
 #include "esp_log.h"
 #include "esp_err.h"
@@ -41,7 +43,7 @@ struct IMUData {
     float gx, gy, gz;
 };
 
-extern bool bmiReady;
+extern bool isBmiReady;
 
 esp_err_t i2c_bus_init();
 

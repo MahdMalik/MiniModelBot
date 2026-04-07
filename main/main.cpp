@@ -80,7 +80,8 @@ extern "C" void app_main(void) {
 	// doBlink();
 
 
-    if(!bmiReady || gotError || modelSetupFailed)
+	//should retry if not ready, 
+    if(!isBmiReady || gotError || modelSetupFailed)
     {
         return;
     }

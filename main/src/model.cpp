@@ -96,7 +96,10 @@ void modelCall()
     {
         interpreter->input(0)->data.int8[i] = (int8_t) theFrame->buf[i];
     }
+    auto startInfTime=esp_timer_get_time();
     TfLiteStatus inferenceResult = interpreter->Invoke();
+    //TODO: send this to file system on esp32
+    auto inferenceTime=esp_timer_get_time()-startInfTime;
 
     if (inferenceResult != kTfLiteOk) 
     {

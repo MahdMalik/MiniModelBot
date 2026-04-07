@@ -7,12 +7,15 @@
 #define I2C_MASTER_FREQ_HZ          100000
 #define BMI270_ADDR                 0x68
 
-bool bmiReady = false;
+bool isBmiReady = false;
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t dev_handle;
 
-// 🔧 Use the logic from your "Working" code
-espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
+//using type alias to reduce error
+using RobotIMU = espp::Bmi270<espp::bmi270::Interface::I2C>;
+
+
+RobotIMU::Config bmi_config = {
     .device_address = BMI270_ADDR,
     .write = [](uint8_t dev_addr, const uint8_t *data, size_t len) {
         // Do NOT manually add the register byte; espp already put it in 'data'
@@ -21,13 +24,12 @@ espp::Bmi270<espp::bmi270::Interface::I2C>::Config bmi_config = {
         return err == ESP_OK;
     },
     .read = [](uint8_t dev_addr, uint8_t *data, size_t len) {
-        // Use raw receive like your working version
         esp_err_t err = i2c_master_receive(dev_handle, data, len, pdMS_TO_TICKS(1000));
         return err == ESP_OK;
     }
 };
 
-std::unique_ptr<espp::Bmi270<espp::bmi270::Interface::I2C>> bmi;
+std::unique_ptr<RobotIMU> imu;
 std::error_code ec;
 
 esp_err_t i2c_bus_init() {
@@ -64,7 +66,6 @@ esp_err_t i2c_bus_init() {
 }
 
 
-// ✅ KEEP THIS (fine as-is)
 void i2c_bus_recovery() {
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << I2C_MASTER_SCL_IO),
@@ -88,11 +89,11 @@ void sensorSetup()
     i2c_bus_recovery();
     i2c_bus_init();
 
-    bmi = std::make_unique<espp::Bmi270<espp::bmi270::Interface::I2C>>(bmi_config);
+    imu = std::make_unique<RobotIMU>(bmi_config);
     
     for (int i = 0; i < 5; i++) {
-        if (bmi->init(ec)) {
-            bmiReady = true;
+        if (imu->init(ec)) {
+            isBmiReady = true;
             ESP_LOGI("BMI270", "SUCCESS! Sensor is alive.");
             break; 
         }
@@ -100,21 +101,22 @@ void sensorSetup()
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    if (!bmiReady) {
+    if (!isBmiReady) {
         ESP_LOGE("BMI270", "CRITICAL: Could not find sensor!");
     }
+    
 }
 
 IMUData getSensorData()
 {
-    if (bmiReady)
+    if (isBmiReady)
     {
         float dt = 1.0f;
         auto start = esp_timer_get_time();
 
-        if (bmi->update(dt, ec)) {
-            auto accel = bmi->get_accelerometer();
-            auto gyro = bmi->get_gyroscope();
+        if (imu->update(dt, ec)) {
+            auto accel = imu->get_accelerometer();
+            auto gyro = imu->get_gyroscope();
 
             printf("Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
                 accel.x, accel.y, accel.z,
@@ -132,4 +134,33 @@ IMUData getSensorData()
     return {};
 }
 
-// ... rest of your sensorSetup() and getSensorData() functions ...
+//setup as zero since this will run on startup
+double previous_velocity=0;
+
+// Pass in esp_timer_get_time() to get current time
+//get instant velocity must be called at the beginning since starting velocity will be zero
+double getInstantVelocity(double previous_time){
+    float dt = 1.0f;
+    //checks if the imu is initialized before called
+     if (!isBmiReady) {
+        printf("Bmi was not initialized with Sensor Setup");
+        return {};
+    }
+
+    //checks if the imu was able to update successfully 
+    if (!imu->update(dt, ec)){
+        printf("IMU could not update its values");
+        return {};
+    }
+
+    //actually calculating velocity now
+    auto current_time = esp_timer_get_time();
+    auto y_accel = imu->get_accelerometer().y;
+
+    //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
+    auto current_velocity= y_accel * (current_time-previous_time)*(10000) + previous_velocity;
+
+    previous_velocity = current_velocity;
+
+    return current_velocity;
+}
