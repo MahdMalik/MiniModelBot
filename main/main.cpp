@@ -79,9 +79,6 @@ extern "C" void app_main(void) {
 	{
 		connectHeadlessModel(g_model, g_model_len);
 		setupModel();
-
-		if (isHeadless)
-		//	customHead.init();  // idk headless model output shape
 	}
     ledc_setup();
 	// doBlink();
