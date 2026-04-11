@@ -10,7 +10,10 @@
 #define LEFT_BACK_MOTOR_PIN     GPIO_NUM_2 // Define the output GPIO
 #define RIGHT_FRONT_MOTOR_PIN	GPIO_NUM_40 // Define the output GPIO
 #define RIGHT_BACK_MOTOR_PIN	GPIO_NUM_39 // Define the output GPIO
-
+//37
+//35
+//38/
+//36
 
 #define LEDC_CHANNEL_LEFT_FRONT          LEDC_CHANNEL_0
 #define LEDC_CHANNEL_LEFT_BACK            LEDC_CHANNEL_1
