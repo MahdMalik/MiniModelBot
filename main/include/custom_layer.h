@@ -48,7 +48,7 @@ struct CustomHead{
 
   void init(int featureSize);
   vector<float> forward(const vector<float> &features);
-  void CustomHead::backward(const vector<float>& features, const vector<float>& h, const vector<float>& probs, int label)
+  void backward(const vector<float>& features, const vector<float>& probs, int label);
   void train(const vector<float> &features, int label);
   void save();
   void load();

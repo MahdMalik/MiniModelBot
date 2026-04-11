@@ -9,7 +9,6 @@
 using namespace std;
 
 static const char* TAG = "CUSTOM_LAYER";
-CustomHead customHead;
 
 float BCE_Loss(const vector<float>& probs, int label){
   // Clamp to avoid log(0)
@@ -53,7 +52,7 @@ void DenseLayer::initFromLoadedModel(int inSize, int outSize) {
   v_w.assign(outSize * inSize, 0.0f);
   m_b.assign(outSize, 0.0f);
   v_b.assign(outSize, 0.0f);
-  timestep = 0;
+  timeStep = 0;
 
   const tflite::Model* loadedModel = tflite::GetModel(modelWeights);
 
@@ -100,10 +99,10 @@ void DenseLayer::initFromLoadedModel(int inSize, int outSize) {
   }
 
   vector<float> loadedWeights(numWeights);
-  for (int i = 0; i < numWeights; i++)
+  for(int i = 0; i < numWeights; i++){
     loadedWeights[i] = (rawWeights[i] - wZeroPoint) * wScale;
-    weights = move(loadedWeights);
-
+  }
+  weights = move(loadedWeights);
     // ── Extract biases ──
     const tflite::Tensor* biasTensor = subgraph->tensors()->Get(biasTensorIndex);
     const tflite::Buffer* biasBuffer = loadedModel->buffers()->Get(biasTensor->buffer());
@@ -143,13 +142,26 @@ void DenseLayer::initRandom(int inSize, int outSize){
 }
 // Create a method to pass forth the output...
 vector<float> DenseLayer::forward(const vector<float> &input, bool isLastLayer){
-  lastHidden = layer1.forward(features, false);
-  return layer2.forward(lastHidden, true);
+  vector<float> output(outputSize);
+    for (int o = 0; o < outputSize; o++) {
+        float sum = biases[o];
+        for (int i = 0; i < inputSize; i++)
+            sum += weights[o * inputSize + i] * input[i];
+        output[o] = isLastLayer ? sum : relu(sum);  // raw logits for last layer
+    }
+    if (isLastLayer) {
+        // softmax
+        float maxVal = *max_element(output.begin(), output.end());
+        float sumExp = 0.0f;
+        for (auto& v : output) { v = expf(v - maxVal); sumExp += v; }
+        for (auto& v : output) v /= sumExp;
+    }
+    return output;
 }
 void DenseLayer::backward(const vector<float>& input, const vector<float>& output, const vector<float>& gradOutput) {
-    timestep++;
-    float bc1 = 1.0f - powf(beta1, (float)timestep);
-    float bc2 = 1.0f - powf(beta2, (float)timestep);
+    timeStep++;
+    float bc1 = 1.0f - powf(beta1, (float)timeStep);
+    float bc2 = 1.0f - powf(beta2, (float)timeStep);
 
     for (int o = 0; o < outputSize; o++) {
       float actGrad = (output[o] > 0.0f) ? gradOutput[o] : 0.0f;
@@ -161,7 +173,7 @@ void DenseLayer::backward(const vector<float>& input, const vector<float>& outpu
       float m_b_hat = m_b[o] / bc1;
       float v_b_hat = v_b[o] / bc2;
       // Update the biases
-      biases[o] -= learningRate * m_b_hat / (sqrtf(v_b_hat) + epsilon);
+      biases[o] -= learning_rate * m_b_hat / (sqrtf(v_b_hat) + epsilon);
       // Iteratively update the weights (each layer has 1 bias and multiple weights...)
       for (int i = 0; i < inputSize; i++) {
         float grad_w = actGrad * input[i];
@@ -171,10 +183,9 @@ void DenseLayer::backward(const vector<float>& input, const vector<float>& outpu
         v_w[idx] = beta2 * v_w[idx] + (1.0f - beta2) * grad_w * grad_w;
         float m_w_hat = m_w[idx] / bc1;
         float v_w_hat = v_w[idx] / bc2;
-        weights[idx] -= learningRate * m_w_hat / (sqrtf(v_w_hat) + epsilon);
+        weights[idx] -= learning_rate * m_w_hat / (sqrtf(v_w_hat) + epsilon);
       }
     }
-    ESP_LOGI(TAG, "BCE Loss: %.4f", loss);
 }
 // NVS Persistence: save to NVS
 bool DenseLayer::saveToNVS(const char* key) {
@@ -223,8 +234,8 @@ void CustomHead::init(int featureSize){
   layer2.initRandom(32, 2);
   
   // Try loading from NVS; fall back to random init
-  if (!layer1.loadFromNVS("l1")) layer1.initRandom();
-  if (!layer2.loadFromNVS("l2")) layer2.initRandom();
+  if (!layer1.loadFromNVS("l1")) layer1.initRandom(featureSize, 32);
+  if (!layer2.loadFromNVS("l2")) layer2.initRandom(32, 2);
 }
 // Forward: forward through layer 1, then forward through layer 2...
 vector<float> CustomHead::forward(const vector<float>& features) {
@@ -235,8 +246,9 @@ vector<float> CustomHead::forward(const vector<float>& features) {
 void CustomHead::backward(const vector<float>& features, const vector<float>& probs, int label) {
   float loss = BCE_Loss(probs, label);
   vector<float> gradLayer2(layer2.outputSize);
-  for (int o = 0; o < layer2.outputSize; o++)
+  for (int o = 0; o < layer2.outputSize; o++){
     gradLayer2[o] = probs[o] - (o == label ? 1.0f : 0.0f);
+  }
 
     vector<float> gradH(layer2.inputSize, 0.0f);
     for (int i = 0; i < layer2.inputSize; i++)
@@ -245,7 +257,7 @@ void CustomHead::backward(const vector<float>& features, const vector<float>& pr
 
     layer2.backward(lastHidden, probs, gradLayer2);
     layer1.backward(features, lastHidden, gradH);
-    
+}
 // Just put the forward passes and backward passes together
 void CustomHead::train(const std::vector<float>& features, int label) {
   auto probs = forward(features);   // caches lastHidden internally

@@ -8,6 +8,8 @@
 bool modelSetupFailed = false;
 bool isHeadless = true;  // true = headless + custom head, false = original headed model
 
+static CustomHead* customHead = nullptr;
+
 // saying extern on these lets us know that we should find them in another file
 extern const unsigned char modelWeights[];
 extern const unsigned int modelLen;
@@ -37,7 +39,8 @@ void connectHeadlessModel(const unsigned char* modelData, unsigned int modelLeng
 std::vector<float> extractFeatures()
 {
     // Output tensor is [1, 12, 12, 16] — flatten to [2304]
-    TfLiteTensor* output = interpreter->tensor(interpreter->tensors_size() - 1);
+    // TfLiteTensor* output = interpreter->tensor(interpreter->tensors_size() - 1);
+    TfLiteTensor* output = interpreter->output(0);
     float   scale      = output->params.scale;
     int32_t zp         = output->params.zero_point;
     int     totalElems = 1 * 12 * 12 * 16;  // 2304
@@ -52,8 +55,10 @@ std::vector<float> extractFeatures()
 void setupModel()
 {
     tensorMemoryArea = (uint8_t*)heap_caps_malloc(tensorMemorySize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    customHead = CustomHead(32);
-    if (tensorMemoryArea == nullptr) {
+    DenseLayer layer1 (32);
+    DenseLayer layer2 (2);
+    customHead = new CustomHead(layer1, layer2);
+   if (tensorMemoryArea == nullptr) {
         CustomPrint("MODEL", "PSRAM Allocation failed! Is PSRAM enabled in menuconfig?");
         modelSetupFailed = true;
         return;
@@ -170,7 +175,7 @@ void modelCall()
     {
         // route through custom head for inference
         auto features = extractFeatures();
-        auto probs    = customHead.forward(features);
+        auto probs    = customHead->forward(features);
         CustomPrint("MODEL", "Class 0: %.3f  Class 1: %.3f", probs[0], probs[1]);
     }
     else
@@ -216,9 +221,9 @@ void modelLearn(int trueLabel)
     esp_camera_fb_return(theFrame);
 
     auto features = extractFeatures();
-    customHead.train(features, trueLabel);
+    customHead->train(features, trueLabel);
 
     static int trainCount = 0;
     if (++trainCount % 50 == 0)
-        customHead.save();
+        customHead->save();
 }
