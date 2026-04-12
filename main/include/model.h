@@ -47,3 +47,4 @@ void connectHeadlessModel(const unsigned char* modelData, unsigned int modelLeng
 
 void setupModel();
 void modelCall();
+void modelLearn(int trueLabel);

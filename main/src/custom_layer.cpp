@@ -47,89 +47,114 @@ void DenseLayer::init(int inSize, int outSize){
 void DenseLayer::initFromLoadedModel(int inSize, int outSize) {
     inputSize  = inSize;
     outputSize = outSize;
-
-  m_w.assign(outSize * inSize, 0.0f);
-  v_w.assign(outSize * inSize, 0.0f);
-  m_b.assign(outSize, 0.0f);
-  v_b.assign(outSize, 0.0f);
-  timeStep = 0;
-
+ 
+    weights.assign(outSize * inSize, 0.0f);
+    biases.assign(outSize, 0.0f);
+ 
     const tflite::Model* loadedModel = tflite::GetModel(modelWeights);
-
-    if(loadedModel->version() != TFLITE_SCHEMA_VERSION) {
+    if (loadedModel->version() != TFLITE_SCHEMA_VERSION) {
         ESP_LOGE(TAG, "Schema version mismatch!");
         initRandom(inSize, outSize);
         return;
     }
-
+ 
     const tflite::SubGraph* subgraph = loadedModel->subgraphs()->Get(0);
-    if(subgraph == nullptr) {
+    if (subgraph == nullptr) {
         ESP_LOGE(TAG, "No subgraph found!");
         initRandom(inSize, outSize);
         return;
     }
-
-    // Get the last operator in the subgraph — that's our final layer
-    int lastOpIndex = subgraph->operators()->size() - 1;
-    const tflite::Operator* lastOp = subgraph->operators()->Get(lastOpIndex);
-
-    // For a FullyConnected layer: inputs[0]=input, inputs[1]=weights, inputs[2]=biases
-    int weightTensorIndex = lastOp->inputs()->Get(1);
-    int biasTensorIndex   = lastOp->inputs()->Get(2);
-
+ 
+    // Scan backwards for the last FullyConnected op specifically.
+    // BuiltinOperator_FULLY_CONNECTED = 9
+    const tflite::Operator* fcOp = nullptr;
+    for (int i = (int)subgraph->operators()->size() - 1; i >= 0; i--) {
+        const tflite::Operator* op = subgraph->operators()->Get(i);
+        auto builtinCode = loadedModel->operator_codes()
+                       ->Get(op->opcode_index())
+                       ->builtin_code();
+        if (builtinCode == tflite::BuiltinOperator_FULLY_CONNECTED) {
+            fcOp = op;
+            break;
+        }
+    }
+ 
+    if (fcOp == nullptr) {
+        ESP_LOGE(TAG, "No FullyConnected op found in model!");
+        initRandom(inSize, outSize);
+        return;
+    }
+ 
+    // FullyConnected inputs: [0]=input, [1]=weights, [2]=biases
+    int weightTensorIndex = fcOp->inputs()->Get(1);
+    int biasTensorIndex   = fcOp->inputs()->Get(2);
+ 
     // ── Extract weights ──
     const tflite::Tensor* weightTensor = subgraph->tensors()->Get(weightTensorIndex);
     const tflite::Buffer* weightBuffer = loadedModel->buffers()->Get(weightTensor->buffer());
-
-    if(weightBuffer == nullptr || weightBuffer->data() == nullptr) {
+ 
+    if (weightBuffer == nullptr || weightBuffer->data() == nullptr) {
         ESP_LOGE(TAG, "Weight buffer is empty!");
         initRandom(inSize, outSize);
         return;
     }
-
-    const int8_t* rawWeights = reinterpret_cast<const int8_t*>(weightBuffer->data()->data());
-    float wScale      = weightTensor->quantization()->scale()->Get(0);
-    int   wZeroPoint  = weightTensor->quantization()->zero_point()->Get(0);
-    int   numWeights  = weightBuffer->data()->size();
-
-    if(numWeights != inSize * outSize) {
+ 
+    // FIX: Guard quantization params before calling ->Get(0).
+    //      If the tensor is unquantized, scale defaults to 1.0 and zeroPoint to 0,
+    //      which means the cast below becomes a straight copy.
+    float wScale     = 1.0f;
+    int   wZeroPoint = 0;
+    auto* wQuant = weightTensor->quantization();
+    if (wQuant && wQuant->scale() && wQuant->scale()->size() > 0) {
+        wScale     = wQuant->scale()->Get(0);
+        wZeroPoint = (int)wQuant->zero_point()->Get(0);
+    } else {
+        ESP_LOGW(TAG, "Weight tensor has no quantization params — using scale=1, zp=0");
+    }
+ 
+    int numWeights = (int)weightBuffer->data()->size(); // size in bytes for int8
+    if (numWeights != inSize * outSize) {
         ESP_LOGE(TAG, "Weight size mismatch! Got %d, expected %d", numWeights, inSize * outSize);
         initRandom(inSize, outSize);
         return;
     }
-
-  vector<float> loadedWeights(numWeights);
-  for(int i = 0; i < numWeights; i++){
-    loadedWeights[i] = (rawWeights[i] - wZeroPoint) * wScale;
-  }
-  weights = move(loadedWeights);
+ 
+    const int8_t* rawWeights = reinterpret_cast<const int8_t*>(weightBuffer->data()->data());
+    for (int i = 0; i < numWeights; i++)
+        weights[i] = (rawWeights[i] - wZeroPoint) * wScale;
+ 
     // ── Extract biases ──
     const tflite::Tensor* biasTensor = subgraph->tensors()->Get(biasTensorIndex);
     const tflite::Buffer* biasBuffer = loadedModel->buffers()->Get(biasTensor->buffer());
-
+ 
     if (biasBuffer == nullptr || biasBuffer->data() == nullptr) {
         ESP_LOGE(TAG, "Bias buffer is empty!");
         biases.assign(outSize, 0.0f);
         return;
     }
-
-    const int32_t* rawBiases = reinterpret_cast<const int32_t*>(biasBuffer->data()->data());
-    float bScale     = biasTensor->quantization()->scale()->Get(0);
-    int   bZeroPoint = biasTensor->quantization()->zero_point()->Get(0);
-    int   numBiases  = biasBuffer->data()->size() / sizeof(int32_t);
-
+ 
+    float bScale     = 1.0f;
+    int   bZeroPoint = 0;
+    auto* bQuant = biasTensor->quantization();
+    if (bQuant && bQuant->scale() && bQuant->scale()->size() > 0) {
+        bScale     = bQuant->scale()->Get(0);
+        bZeroPoint = (int)bQuant->zero_point()->Get(0);
+    } else {
+        ESP_LOGW(TAG, "Bias tensor has no quantization params — using scale=1, zp=0");
+    }
+ 
+    int numBiases = (int)biasBuffer->data()->size() / sizeof(int32_t);
     if (numBiases != outSize) {
         ESP_LOGE(TAG, "Bias size mismatch! Got %d, expected %d", numBiases, outSize);
         biases.assign(outSize, 0.0f);
         return;
     }
-
-    vector<float> loadedBiases(numBiases);
+ 
+    const int32_t* rawBiases = reinterpret_cast<const int32_t*>(biasBuffer->data()->data());
     for (int i = 0; i < numBiases; i++)
-        loadedBiases[i] = (rawBiases[i] - bZeroPoint) * bScale;
-    biases = move(loadedBiases);
-
-    ESP_LOGI(TAG, "Loaded last layer weights [%d] and biases [%d] from model", numWeights, numBiases);
+        biases[i] = (rawBiases[i] - bZeroPoint) * bScale;
+ 
+    ESP_LOGI(TAG, "Loaded FC layer weights [%d] and biases [%d] from model", numWeights, numBiases);
 }
 
 // Initialize the layer with random values: use when not loading from flashed c-array model

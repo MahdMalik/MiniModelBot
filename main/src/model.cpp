@@ -15,7 +15,7 @@ extern const unsigned char modelWeights[];
 extern const unsigned int modelLen;
 
 uint8_t* tensorMemoryArea = nullptr; 
-const int tensorMemorySize = 150 * 1024; // 300KB - plenty of room in PSRAM
+const int tensorMemorySize = 730 * 1024; // 300KB - plenty of room in PSRAM
 
 const tflite::Model* model = nullptr;
 static tflite::MicroMutableOpResolver<5> operationsManager;
@@ -55,9 +55,8 @@ std::vector<float> extractFeatures()
 void setupModel()
 {
     tensorMemoryArea = (uint8_t*)heap_caps_malloc(tensorMemorySize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    DenseLayer layer1 (32);
-    DenseLayer layer2 (2);
-    customHead = new CustomHead(layer1, layer2);
+    customHead = new CustomHead();
+    customHead->init(32);
    if (tensorMemoryArea == nullptr) {
         CustomPrint("MODEL", "PSRAM Allocation failed! Is PSRAM enabled in menuconfig?");
         modelSetupFailed = true;
@@ -177,18 +176,19 @@ void modelCall()
         auto features = extractFeatures();
         auto probs    = customHead->forward(features);
         CustomPrint("MODEL", "Class 0: %.3f  Class 1: %.3f", probs[0], probs[1]);
+        CustomPrint("MODEL", "Loss: %.4f", BCE_Loss(probs, probs[0] > probs[1] ? 0 : 1));
     }
     else
     {
         // TODO: fill in correct output tensor index once headed model is inspected
-        // int8_t stillQuantizedOutputClass0 = interpreter->output(0)->data.int8[0];
+        int8_t stillQuantizedOutputClass0 = interpreter->output(0)->data.int8[0];
 
-        //unquantize it this way, get class 1 prob from it easily then
-        // float class0Prob = (float) (stillQuantizedOutputClass0 - theOutputZeroPoint) * theOutputScale;
-        // float class1Prob = 1 - class0Prob;
+        // unquantize it this way, get class 1 prob from it easily then
+        float class0Prob = (float) (stillQuantizedOutputClass0 - theOutputZeroPoint) * theOutputScale;
+        float class1Prob = 1 - class0Prob;
 
-        // CustomPrint("MODEL", "The probability of class 0 is is %f\n", class0Prob);
-        // CustomPrint("MODEL", "The probability of class 1 is is %f\n", class1Prob);
+        CustomPrint("MODEL", "The probability of class 0 is is %f\n", class0Prob);
+        CustomPrint("MODEL", "The probability of class 1 is is %f\n", class1Prob);
     }
 
     // do this or else we'll use up all our memory in PSRAM

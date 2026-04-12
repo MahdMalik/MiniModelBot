@@ -118,7 +118,7 @@ extern "C" void app_main(void) {
 			modelCall();
 
 			// Uncomment when you have a label source (button, serial, MQTT, etc.)
-			// modelLearn(trueLabel);
+			modelLearn(0);
 		}
 	}
 }
