@@ -60,6 +60,16 @@
 static uint8_t s_led_state = 0;
 bool usingModel = true;
 
+int getLabel(){
+	double velocity = getInstantVelocity(esp_timer_get_time());
+	if(velocity <= 0.5){
+		return 0;
+	}
+	else{
+		return 1;
+	}
+}
+
 //just quickly putting the on-chip LED to high
 void doBlink()
 {
@@ -119,7 +129,7 @@ extern "C" void app_main(void) {
 			modelCall();
 
 			// Uncomment when you have a label source (button, serial, MQTT, etc.)
-			modelLearn(0);
+			modelLearn(getLabel());
 		}
 	}
 }
