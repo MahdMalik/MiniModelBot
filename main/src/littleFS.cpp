@@ -36,7 +36,6 @@ void littleFSInit(){
     // Use settings defined above to initialize and mount LittleFS filesystem at /littlefs.
     // Note: esp_vfs_littlefs_register is an all-in-one convenience function.
     esp_err_t ret = esp_vfs_littlefs_register(&conf);
-
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
             ESP_LOGE(TAG, "Failed to mount or format filesystem");
@@ -79,7 +78,8 @@ void writeToFile(const char* data){
     std::cout<<"File written";
 }
 
-void goToNewFile(){
+//creates file directory at file 1
+void moveToNewFile(){
     ++fileNumber;
     std::cout<<"Current file name changed to "<< fileNumber<<" file";
 }
