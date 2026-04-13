@@ -64,8 +64,8 @@ void getLFSPartitionInfo(){
 // First create a file
 static long fileNumber = 0;
 
-//takes data in to file + file number name
-void writeToFile(const char* data){
+//takes STRING data in to file + file number name
+void writeToFile(std::string data){
     std::cout<<("Opening file");
 
     std::string pathName="/littlefs/"+std::to_string(fileNumber) +".txt";
