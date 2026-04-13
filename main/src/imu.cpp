@@ -150,6 +150,7 @@ double getInstantVelocity(double previous_time){
     //checks if the imu was able to update successfully 
     if (!imu->update(dt, ec)){
         printf("IMU could not update its values");
+        //TODO:Add log here
         return {};
     }
 
