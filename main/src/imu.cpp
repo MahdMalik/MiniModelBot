@@ -1,5 +1,6 @@
 #include "imu.h"
 #include "driver/i2c_master.h"
+#include "littlefs.h"
 
 #define I2C_MASTER_SCL_IO           41
 #define I2C_MASTER_SDA_IO           42
@@ -100,7 +101,6 @@ void sensorSetup()
         ESP_LOGW("BMI270", "Init attempt %d failed: %s", i+1, ec.message().c_str());
         vTaskDelay(pdMS_TO_TICKS(500));
     }
-
     if (!isBmiReady) {
         ESP_LOGE("BMI270", "CRITICAL: Could not find sensor!");
     }
@@ -151,6 +151,7 @@ double getInstantVelocity(double previous_time){
     if (!imu->update(dt, ec)){
         printf("IMU could not update its values");
         //TODO:Add log here
+        writeToFile("IMU could not update its values");
         return {};
     }
 
