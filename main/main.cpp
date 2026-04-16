@@ -54,8 +54,21 @@
 
 #define FADE_RESOLUTION			10
 
+#include "headless_model.h"
+#include "headless_model_data.h"
+
 static uint8_t s_led_state = 0;
 bool usingModel = true;
+
+int getLabel(){
+	double velocity = getInstantVelocity(esp_timer_get_time());
+	if(velocity <= 0.5){
+		return 0;
+	}
+	else{
+		return 1;
+	}
+}
 
 //just quickly putting the on-chip LED to high
 void doBlink()
@@ -74,6 +87,7 @@ extern "C" void app_main(void) {
 	cameraInit();
 	if(usingModel)
 	{
+		connectHeadlessModel(g_model, g_model_len);
 		setupModel();
 	}
     ledc_setup();
@@ -106,8 +120,16 @@ extern "C" void app_main(void) {
 	ESP_LOGI("INFO", "it worked out!");
 
     // Just launch the task and let it run
-		
+	ESP_LOGI("INFO", "Hopefully, something happened to the model");
     
     // app_main can now just chill or handle other things (like WiFi/HTTP)
-    while(1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
+    while(1) { vTaskDelay(pdMS_TO_TICKS(1000)); 
+		if (usingModel)
+		{
+			modelCall();
+
+			// Uncomment when you have a label source (button, serial, MQTT, etc.)
+			modelLearn(getLabel());
+		}
+	}
 }

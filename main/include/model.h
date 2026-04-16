@@ -44,6 +44,9 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 
 extern bool modelSetupFailed;
+extern bool isHeadless;
+void connectHeadlessModel(const unsigned char* modelData, unsigned int modelLength);
 
 void setupModel();
 void modelCall();
+void modelLearn(int trueLabel);
