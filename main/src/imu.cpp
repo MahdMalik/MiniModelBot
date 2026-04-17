@@ -136,13 +136,13 @@ IMUData getSensorData()
 
 //setup as zero since this will run on startup
 double previous_velocity=0;
+double previous_time=0;
 
-// Pass in esp_timer_get_time() to get current time
 //get instant velocity must be called at the beginning since starting velocity will be zero
-double getInstantVelocity(double previous_time){
+double getInstantVelocity(){
     float dt = 1.0f;
     //checks if the imu is initialized before called
-     if (!isBmiReady) {
+    if (!isBmiReady) {
         printf("Bmi was not initialized with Sensor Setup");
         return {};
     }
@@ -150,7 +150,6 @@ double getInstantVelocity(double previous_time){
     //checks if the imu was able to update successfully 
     if (!imu->update(dt, ec)){
         printf("IMU could not update its values");
-        //TODO:Add log here
         writeToFile("IMU could not update its values");
         return {};
     }
@@ -160,9 +159,10 @@ double getInstantVelocity(double previous_time){
     auto y_accel = imu->get_accelerometer().y;
 
     //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
-    auto current_velocity= y_accel * (current_time-previous_time)*(10000) + previous_velocity;
+    auto current_velocity= y_accel * (current_time-previous_time)/(1000000) + previous_velocity;
 
     previous_velocity = current_velocity;
+    previous_time = current_time;
 
     return current_velocity;
 }

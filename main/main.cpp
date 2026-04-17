@@ -60,6 +60,7 @@
 static uint8_t s_led_state = 0;
 bool usingModel = true;
 
+//returns 0 if traversible (velocity<.5) returns 1 if traversible
 int getLabel(){
 	double velocity = getInstantVelocity(esp_timer_get_time());
 	if(velocity <= 0.5){
@@ -80,6 +81,7 @@ void doBlink()
 }
 
 extern "C" void app_main(void) {
+	
 
 	vTaskDelay(pdMS_TO_TICKS(5000));
 
