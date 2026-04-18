@@ -52,3 +52,5 @@ void i2c_bus_recovery();
 void sensorSetup();
 
 IMUData getSensorData();
+
+double getInstantVelocity(double previous_time);
