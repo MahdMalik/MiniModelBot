@@ -1,5 +1,3 @@
-#pragma once
-
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -13,11 +11,14 @@
 #include "esp_idf_version.h"
 #include "esp_flash.h"
 #include "esp_chip_info.h"
+#include "esp_timer.h"
 #include "spi_flash_mmap.h"
 
 #include "esp_littlefs.h"
 #include <fstream>
 #include <iostream>
+
+#include "my_littlefs.h"
 
 
 //tag for logging
@@ -68,6 +69,7 @@ static long fileNumber = 0;
 
 //takes STRING data in to file + file number name
 void writeToFile(std::string data){
+    auto startTime=esp_timer_get_time();
     std::cout<<("Opening file");
 
     std::string pathName="/littlefs/"+std::to_string(fileNumber) +".txt";
@@ -75,10 +77,15 @@ void writeToFile(std::string data){
     std::ofstream MyFile(pathName);
 
     MyFile << data;
-
+    auto endTime = startTime-esp_timer_get_time();
     MyFile.close();
-    std::cout<<"File written";
+    std::cout<<"File written in "+std::to_string(endTime);
 }
+
+//seperated this so that way I can write without having to reopen and close each time
+// void closeFile(){
+//     MyFile.close();
+// }
 
 //creates file directory at file 1
 void moveToNewFile(){

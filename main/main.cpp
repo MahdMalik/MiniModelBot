@@ -42,6 +42,7 @@
 #include "imu.h"
 #include "camera.h"
 #include "model.h"
+#include "my_littlefs.h"
 
 #define PORT					30000
 #define KEEPALIVE_IDLE			CONFIG_KEEPALIVE_IDLE
@@ -62,7 +63,7 @@ bool usingModel = true;
 
 //returns 0 if traversible (velocity<.5) returns 1 if traversible
 int getLabel(){
-	double velocity = getInstantVelocity(esp_timer_get_time());
+	double velocity = getInstantVelocity();
 	if(velocity <= 0.5){
 		return 0;
 	}
@@ -123,6 +124,9 @@ extern "C" void app_main(void) {
 
     // Just launch the task and let it run
 	ESP_LOGI("INFO", "Hopefully, something happened to the model");
+
+	littleFSInit();
+	writeToFile("writing test to file");
     
     // app_main can now just chill or handle other things (like WiFi/HTTP)
     while(1) { vTaskDelay(pdMS_TO_TICKS(1000)); 

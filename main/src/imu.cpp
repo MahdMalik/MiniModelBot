@@ -1,6 +1,6 @@
 #include "imu.h"
 #include "driver/i2c_master.h"
-#include "littlefs.h"
+#include "my_littlefs.h"
 
 #define I2C_MASTER_SCL_IO           41
 #define I2C_MASTER_SDA_IO           42
@@ -150,7 +150,7 @@ double getInstantVelocity(){
     //checks if the imu was able to update successfully 
     if (!imu->update(dt, ec)){
         printf("IMU could not update its values");
-        writeToFile("IMU could not update its values");
+        // writeToFile("IMU could not update its values");
         return {};
     }
 
