@@ -16,9 +16,9 @@
 #include "soc/clk_tree_defs.h"
 
 /* #include "protocol_examples_common.h" // Wi-Fi connectivity */
-#include <sys/socket.h>		// Sockets
-#include <unistd.h>			// Close
-#include <netdb.h>			// gethostbyname
+#include <sys/socket.h> // Sockets
+#include <unistd.h>     // Close
+#include <netdb.h>      // gethostbyname
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -51,19 +51,18 @@
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/schema/schema_generated.h"
-//#include "tensorflow/lite/system_setup.h"
+// #include "tensorflow/lite/system_setup.h"
 #include "model_data.h"
 
-#define PORT					30000
-#define KEEPALIVE_IDLE			CONFIG_KEEPALIVE_IDLE
-#define KEEPALIVE_INTERVAL		CONFIG_KEEPALIVE_INTERVAL
-#define KEEPALIVE_COUNT			CONFIG_KEEPALIVE_COUNT
+#define PORT 30000
+#define KEEPALIVE_IDLE CONFIG_KEEPALIVE_IDLE
+#define KEEPALIVE_INTERVAL CONFIG_KEEPALIVE_INTERVAL
+#define KEEPALIVE_COUNT CONFIG_KEEPALIVE_COUNT
 
 #define BLINK_GPIO GPIO_NUM_48
 #define BLINK_PERIOD 1000
 
-
-#define FADE_RESOLUTION			10
+#define FADE_RESOLUTION 10
 
 #define CONFIDENCE_THRESHOLD 0.6f
 #define TURN_HURST_MS 400
@@ -72,7 +71,6 @@
 
 static uint8_t s_led_state = 0;
 bool usingModel = true;
-
 
 // static const unsigned char *const modelWeights =
 //     _content_drive_MyDrive_ACMResearchDataset_model_model_cnn_int8_tflite;
@@ -84,74 +82,82 @@ static int32_t inputZeroPoint = 0;
 static float outputScale = 0.0f;
 static int32_t outputZeroPoint = 0;
 
-
-//just quickly putting the on-chip LED to high
+// just quickly putting the on-chip LED to high
 void doBlink()
 {
-	gpio_reset_pin(BLINK_GPIO);
-	gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-	s_led_state = 1;
-	gpio_set_level(BLINK_GPIO, s_led_state);
+    gpio_reset_pin(BLINK_GPIO);
+    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+    s_led_state = 1;
+    gpio_set_level(BLINK_GPIO, s_led_state);
 }
 
-static bool model_init(void)
-{
-    const tflite::Model *model = tflite::GetModel(modelWeights);
-    if (model->version() != TFLITE_SCHEMA_VERSION)
-    {
-        ESP_LOGE("MODEL", "Schema version mismatch: %d", (int)model->version());
-        return false;
-    }
+// static bool model_init(void)
+// {
+//     const tflite::Model *model = tflite::GetModel(modelWeights);
+//     if (model->version() != TFLITE_SCHEMA_VERSION)
+//     {
+//         ESP_LOGE("MODEL", "Schema version mismatch: %d", (int)model->version());
+//         return false;
+//     }
 
-    static tflite::MicroMutableOpResolver<5> resolver;
-    if (resolver.AddConv2D() != kTfLiteOk) return false;
-    if (resolver.AddMaxPool2D() != kTfLiteOk) return false;
-    if (resolver.AddMean() != kTfLiteOk) return false;
-    if (resolver.AddFullyConnected() != kTfLiteOk) return false;
-    if (resolver.AddLogistic() != kTfLiteOk) return false;
+//     static tflite::MicroMutableOpResolver<5> resolver;
+//     if (resolver.AddConv2D() != kTfLiteOk)
+//         return false;
+//     if (resolver.AddMaxPool2D() != kTfLiteOk)
+//         return false;
+//     if (resolver.AddMean() != kTfLiteOk)
+//         return false;
+//     if (resolver.AddFullyConnected() != kTfLiteOk)
+//         return false;
+//     if (resolver.AddLogistic() != kTfLiteOk)
+//         return false;
 
-    static tflite::MicroInterpreter local_interpreter(model, resolver, tensorArena, TENSOR_ARENA_SIZE);
-    interpreter = &local_interpreter;
+//     static tflite::MicroInterpreter local_interpreter(model, resolver, tensorArena, TENSOR_ARENA_SIZE);
+//     interpreter = &local_interpreter;
 
-    if (interpreter->AllocateTensors() != kTfLiteOk)
-    {
-        ESP_LOGE("MODEL", "failed to allocate tensors");
-        return false;
-    }
+//     if (interpreter->AllocateTensors() != kTfLiteOk)
+//     {
+//         ESP_LOGE("MODEL", "failed to allocate tensors");
+//         return false;
+//     }
 
-    inputScale = interpreter->input(0)->params.scale;
-    inputZeroPoint = interpreter->input(0)->params.zero_point;
-    outputScale = interpreter->output(0)->params.scale;
-    outputZeroPoint = interpreter->output(0)->params.zero_point;
+//     inputScale = interpreter->input(0)->params.scale;
+//     inputZeroPoint = interpreter->input(0)->params.zero_point;
+//     outputScale = interpreter->output(0)->params.scale;
+//     outputZeroPoint = interpreter->output(0)->params.zero_point;
 
-    ESP_LOGI("MODEL", "Model initialized successfully");
-    return true;
-}
+//     ESP_LOGI("MODEL", "Model initialized successfully");
+//     return true;
+// }
 
-static float run_inference(camera_fb_t *frame)
-{
-    int8_t *inputBuf = interpreter->input(0)->data.int8;
-    for (size_t i = 0; i < frame->len; i++)
-    {
-        float norm = frame->buf[i] / 255.0f;
-        int16_t q = (int16_t)roundf(norm / inputScale) + inputZeroPoint;
-        if (q > 127) q = 127;
-        if (q < -128) q = -128;
-        inputBuf[i] = (int8_t)q;
-    }
+// static float run_inference(camera_fb_t *frame)
+// {
+//     int8_t *inputBuf = interpreter->input(0)->data.int8;
+//     for (size_t i = 0; i < frame->len; i++)
+//     {
+//         float norm = frame->buf[i] / 255.0f;
+//         int16_t q = (int16_t)roundf(norm / inputScale) + inputZeroPoint;
+//         if (q > 127)
+//             q = 127;
+//         if (q < -128)
+//             q = -128;
+//         inputBuf[i] = (int8_t)q;
+//     }
 
-    if (interpreter->Invoke() != kTfLiteOk)
-    {
-        ESP_LOGE("MODEL", "Inference failed");
-        return -1.0f;
-    }
+//     if (interpreter->Invoke() != kTfLiteOk)
+//     {
+//         ESP_LOGE("MODEL", "Inference failed");
+//         return -1.0f;
+//     }
 
-    int8_t rawOut = interpreter->output(0)->data.int8[0];
-    float prob = (float)(rawOut - outputZeroPoint) * outputScale;
-    if (prob < 0.0f) prob = 0.0f;
-    if (prob > 1.0f) prob = 1.0f;
-    return prob;
-}
+//     int8_t rawOut = interpreter->output(0)->data.int8[0];
+//     float prob = (float)(rawOut - outputZeroPoint) * outputScale;
+//     if (prob < 0.0f)
+//         prob = 0.0f;
+//     if (prob > 1.0f)
+//         prob = 1.0f;
+//     return prob;
+// }
 
 static void setMotors(float left, float right)
 {
@@ -163,22 +169,22 @@ static void setMotors(float left, float right)
 static void control_task(void *pvParameters)
 {
 
-
     int turnDir = 0;
 
     // ramp motor up to move forward
-    for (int i =0; i < 20; i++) {
+    for (int i = 0; i < 20; i++)
+    {
         vTaskDelay(pdMS_TO_TICKS(100));
         currentDirection[0] = i;
         currentDirection[1] = i;
-        ESP_LOGI("MAIN", "Setting power: %d", i); 
+        ESP_LOGI("MAIN", "Setting power: %d", i);
 
         move(false);
     }
 
-
     while (true)
     {
+        modelCall();
         camera_fb_t *frame = esp_camera_fb_get();
         if (frame == nullptr)
         {
@@ -187,7 +193,7 @@ static void control_task(void *pvParameters)
             continue;
         }
 
-        float traversableProb = run_inference(frame);
+        float traversableProb = getLastClass1Prob();
         esp_camera_fb_return(frame);
 
         if (traversableProb < 0.0f)
@@ -233,7 +239,7 @@ static void control_task(void *pvParameters)
 }
 
 // testing with camera
-extern "C" void main(void)
+extern "C" void app_main(void)
 {
     vTaskDelay(pdMS_TO_TICKS(5000));
 
@@ -251,20 +257,15 @@ extern "C" void main(void)
     //     return;
     // }
 
-    //IMUData newData = getSensorData();
+    // IMUData newData = getSensorData();
 
     ESP_LOGI("INFO", "it worked out!");
 
-    if (!model_init())
-    {
-        ESP_LOGE("MAIN", "model initialization failed");
-        while (true) { vTaskDelay(pdMS_TO_TICKS(1000)); }
-    }
     xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL);
 
-
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000)); 
+    while (1)
+    {
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -290,7 +291,7 @@ extern "C" void main(void)
 //         vTaskDelay(pdMS_TO_TICKS(100));
 //         currentDirection[0] = i;
 //         currentDirection[1] = i;
-//         ESP_LOGI("MAIN", "Setting power: %d", i); 
+//         ESP_LOGI("MAIN", "Setting power: %d", i);
 
 //         move(false);
 //     }
