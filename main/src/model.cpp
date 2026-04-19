@@ -149,6 +149,7 @@ void setupModel()
     CustomPrint("MODEL", "The output zero point number is actually %d\n", theOutputZeroPoint);
 }
 
+//calls the model 
 void modelCall()
 {
     camera_fb_t *theFrame = getCamFrame();

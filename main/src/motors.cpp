@@ -92,10 +92,7 @@ float getRawDutyFromPercent(float duty)
 // from the direction going from -100 to 100, gets actual duty value needed to send to the motors
 uint32_t getRawDutyFromBaseDirection(float direction)
 {
-	// direction: -100 to 100
-
 	float pulse;
-
 	if (direction > 0)
 	{
 		pulse = 1500 + (direction / 100.0) * 500; // 1500 → 2000
@@ -125,28 +122,40 @@ void actuallyUpdateDuties(ledc_channel_t channel, float chosenDirection)
 	ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, channel));
 }
 
-void move(bool startup)
+void move()
 {
-	if (startup)
-	{
-		// Move the left motor
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
-	}
-	else
-	{
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
-	}
+	for (int i = 0; i < 20; i++)
+    {
+		vTaskDelay(pdMS_TO_TICKS(100));
+		currentDirection[0] = i;
+        currentDirection[1] = i;
 
+		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(currentDirection[0]));
+		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
+
+        ESP_LOGI("Motors", "Setting power: %d", i);
+    }
 	// ACTUAL DUTIES ARE: 56-89 FOR FORWARD (INCLUSIVE)
 	// AND THEN 16 TO 49 FOR REVERSE (INCLUSIVE), 16 IS FASTER THAN 49
 }
+//turns the robot right
+void turnRight(){
+	for (int i = 0; i < 20; i++)
+    {
+		vTaskDelay(pdMS_TO_TICKS(100));
+		currentDirection[0] = i;
+        currentDirection[1] = i;
 
+		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(-currentDirection[0]));
+		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(-currentDirection[0]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
+		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
+
+        ESP_LOGI("Motors", "Setting power: %d", i);
+    }
+}
 // sets up the PWM pins and timer
 void ledc_setup()
 {
@@ -219,5 +228,5 @@ void ledc_setup()
 	currentDirection[1] = 0;
 
 	// Move the motors to start position
-	move(true);
+	move();
 }

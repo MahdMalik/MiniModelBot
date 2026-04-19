@@ -36,6 +36,7 @@
 #include "driver/uart.h"
 #include "esp_heap_caps.h"
 #include "driver/i2c.h"
+#include <iostream>
 
 #include "PrintFunctions.h"
 #include "motors.h"
@@ -99,6 +100,7 @@ static float outputScale = 0.0f;
 static int32_t outputZeroPoint = 0;
 
 // just quickly putting the on-chip LED to high
+//TODO: make 
 void doBlink()
 {
     gpio_reset_pin(BLINK_GPIO);
@@ -106,33 +108,15 @@ void doBlink()
     s_led_state = 1;
     gpio_set_level(BLINK_GPIO, s_led_state);
 }
-//pass in left and right between 100 and -100
-static void setMotors(float left, float right)
-{
-    currentDirection[0] = left;
-    currentDirection[1] = right;
-    move(false);
-}
 
 static void control_task(void *pvParameters)
 {
-
-    int turnDir = 0;
-
-    // ramp motor up to move forward
-    for (int i = 0; i < 20; i++)
-    {
-        vTaskDelay(pdMS_TO_TICKS(100));
-        currentDirection[0] = i;
-        currentDirection[1] = i;
-        ESP_LOGI("MAIN", "Setting power: %d", i);
-
-        move(false);
-    }
     while (true)
     {
         modelCall();
-        modelLearn(1); // i moved it from app_main so it runs in the same task as inference
+		std::cout<<"Model was called!";
+        modelLearn(getLabel()); // i moved it from app_main so it runs in the same task as inference
+		std::cout<<"Continous learning was called label was "+ std::to_string(getLabel());
 
         camera_fb_t *frame = esp_camera_fb_get();
         if (frame == nullptr)
@@ -143,49 +127,24 @@ static void control_task(void *pvParameters)
         }
 
         float traversableProb = getLastClass1Prob();
+		std::cout<<"Last Class 1 prob "+ std::to_string(traversableProb);
         esp_camera_fb_return(frame);
 
         //checking if frame is intraversible
         if (traversableProb < CONFIDENCE_THRESHOLD)
         {
-            //TODO: make setmotors naturally ramp up
-            setMotors(0, 0);
+			turnRight();
             vTaskDelay(pdMS_TO_TICKS(200));
+			ESP_LOGI("CONTROL", "traversable: %.2f", traversableProb);
             continue;
         }
-
-        ESP_LOGI("CONTROL", "traversable: %.2f", traversableProb);
-
-        //checking if frame is confident
-        if (traversableProb >= CONFIDENCE_THRESHOLD)
+        //checking if frame is traversible (equal to or above the confidence threshold)
+        else if (traversableProb >= CONFIDENCE_THRESHOLD)
         {
-            if (turnDir != 0)
-            {
-                ESP_LOGI("CONTROL", "path is clear, driving forward");
-                turnDir = 0;
-            }
-            setMotors(DRIVE_FORWARD_POWER, DRIVE_FORWARD_POWER);
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-        else
-        {
-            setMotors(0, 0);
-            vTaskDelay(pdMS_TO_TICKS(50));
-
-            if (turnDir == 0)
-            {
-                turnDir = (esp_random() & 1) ? 1 : 2;
-                ESP_LOGI("CONTROL", "obstacle, turning %s", turnDir == 1 ? "left" : "right");
-            }
-
-            if (turnDir == 1)
-                setMotors(-TURN_POWER, TURN_POWER);
-            else
-                setMotors(TURN_POWER, -TURN_POWER);
-
-            vTaskDelay(pdMS_TO_TICKS(TURN_HURST_MS));
-            setMotors(0, 0);
-            vTaskDelay(pdMS_TO_TICKS(100));
+            ESP_LOGI("CONTROL", "path is clear, driving forward");
+			move();
+			vTaskDelay(pdMS_TO_TICKS(200));
+			ESP_LOGI("CONTROL", "path is clear, driving forward");
         }
     }
 }
