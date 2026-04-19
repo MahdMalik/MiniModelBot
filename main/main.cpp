@@ -282,10 +282,10 @@ extern "C" void app_main(void)
 
     ESP_LOGI("INFO", "it worked out!");
 
-    littleFSInit();
+    littleFSInit(); // moved your stuff from other main function below to here
     writeToFile("writing test to file");
 
-    xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL);
+    xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL); // modellearn() is in here now btw
 
     while (1)
     {
