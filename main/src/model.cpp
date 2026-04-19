@@ -188,6 +188,7 @@ void modelCall()
         // unquantize it this way, get class 1 prob from it easily then
         float class0Prob = (float)(stillQuantizedOutputClass0 - theOutputZeroPoint) * theOutputScale;
         float class1Prob = 1 - class0Prob;
+        lastClass1Prob = class1Prob;
 
         CustomPrint("MODEL", "The probability of class 0 is is %f\n", class0Prob);
         CustomPrint("MODEL", "The probability of class 1 is is %f\n", class1Prob);
@@ -199,6 +200,7 @@ void modelCall()
 
 float getLastClass1Prob()
 {
+    
     return lastClass1Prob;
 }
 

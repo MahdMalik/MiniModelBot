@@ -1,5 +1,3 @@
-#pragma once
-
 #include "rom/ets_sys.h"
 #include "esp_log.h"
 #include "esp_err.h"
@@ -65,7 +63,7 @@
 
 #define FADE_RESOLUTION 10
 
-#define CONFIDENCE_THRESHOLD 0.6f
+#define CONFIDENCE_THRESHOLD 0.5f
 #define TURN_HURST_MS 400
 #define DRIVE_FORWARD_POWER 20
 #define TURN_POWER 100
@@ -108,75 +106,7 @@ void doBlink()
     s_led_state = 1;
     gpio_set_level(BLINK_GPIO, s_led_state);
 }
-
-// static bool model_init(void)
-// {
-//     const tflite::Model *model = tflite::GetModel(modelWeights);
-//     if (model->version() != TFLITE_SCHEMA_VERSION)
-//     {
-//         ESP_LOGE("MODEL", "Schema version mismatch: %d", (int)model->version());
-//         return false;
-//     }
-
-//     static tflite::MicroMutableOpResolver<5> resolver;
-//     if (resolver.AddConv2D() != kTfLiteOk)
-//         return false;
-//     if (resolver.AddMaxPool2D() != kTfLiteOk)
-//         return false;
-//     if (resolver.AddMean() != kTfLiteOk)
-//         return false;
-//     if (resolver.AddFullyConnected() != kTfLiteOk)
-//         return false;
-//     if (resolver.AddLogistic() != kTfLiteOk)
-//         return false;
-
-//     static tflite::MicroInterpreter local_interpreter(model, resolver, tensorArena, TENSOR_ARENA_SIZE);
-//     interpreter = &local_interpreter;
-
-//     if (interpreter->AllocateTensors() != kTfLiteOk)
-//     {
-//         ESP_LOGE("MODEL", "failed to allocate tensors");
-//         return false;
-//     }
-
-//     inputScale = interpreter->input(0)->params.scale;
-//     inputZeroPoint = interpreter->input(0)->params.zero_point;
-//     outputScale = interpreter->output(0)->params.scale;
-//     outputZeroPoint = interpreter->output(0)->params.zero_point;
-
-//     ESP_LOGI("MODEL", "Model initialized successfully");
-//     return true;
-// }
-
-// static float run_inference(camera_fb_t *frame)
-// {
-//     int8_t *inputBuf = interpreter->input(0)->data.int8;
-//     for (size_t i = 0; i < frame->len; i++)
-//     {
-//         float norm = frame->buf[i] / 255.0f;
-//         int16_t q = (int16_t)roundf(norm / inputScale) + inputZeroPoint;
-//         if (q > 127)
-//             q = 127;
-//         if (q < -128)
-//             q = -128;
-//         inputBuf[i] = (int8_t)q;
-//     }
-
-//     if (interpreter->Invoke() != kTfLiteOk)
-//     {
-//         ESP_LOGE("MODEL", "Inference failed");
-//         return -1.0f;
-//     }
-
-//     int8_t rawOut = interpreter->output(0)->data.int8[0];
-//     float prob = (float)(rawOut - outputZeroPoint) * outputScale;
-//     if (prob < 0.0f)
-//         prob = 0.0f;
-//     if (prob > 1.0f)
-//         prob = 1.0f;
-//     return prob;
-// }
-
+//pass in left and right between 100 and -100
 static void setMotors(float left, float right)
 {
     currentDirection[0] = left;
@@ -199,11 +129,10 @@ static void control_task(void *pvParameters)
 
         move(false);
     }
-
     while (true)
     {
         modelCall();
-        modelLearn(getLabel()); // i moved it from app_main so it runs in the same task as inference
+        modelLearn(1); // i moved it from app_main so it runs in the same task as inference
 
         camera_fb_t *frame = esp_camera_fb_get();
         if (frame == nullptr)
@@ -216,8 +145,10 @@ static void control_task(void *pvParameters)
         float traversableProb = getLastClass1Prob();
         esp_camera_fb_return(frame);
 
-        if (traversableProb < 0.0f)
+        //checking if frame is intraversible
+        if (traversableProb < CONFIDENCE_THRESHOLD)
         {
+            //TODO: make setmotors naturally ramp up
             setMotors(0, 0);
             vTaskDelay(pdMS_TO_TICKS(200));
             continue;
@@ -225,6 +156,7 @@ static void control_task(void *pvParameters)
 
         ESP_LOGI("CONTROL", "traversable: %.2f", traversableProb);
 
+        //checking if frame is confident
         if (traversableProb >= CONFIDENCE_THRESHOLD)
         {
             if (turnDir != 0)
