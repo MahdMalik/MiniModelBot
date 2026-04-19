@@ -77,9 +77,9 @@ void writeToFile(std::string data){
     std::ofstream MyFile(pathName);
 
     MyFile << data;
-    auto endTime = startTime-esp_timer_get_time();
     MyFile.close();
-    std::cout<<"File written in "+std::to_string(endTime);
+    auto endTime = ((esp_timer_get_time()-startTime));
+    std::cout<<"File written in "+std::to_string(endTime)+" microseconds\n";
 }
 
 //seperated this so that way I can write without having to reopen and close each time
