@@ -53,4 +53,4 @@ void sensorSetup();
 
 IMUData getSensorData();
 
-double getInstantVelocity(double previous_time);
+double getInstantVelocity();

@@ -44,6 +44,7 @@
 #include "imu.h"
 #include "camera.h"
 #include "model.h"
+#include "my_littlefs.h"
 
 #include "esp_camera.h"
 #include "esp_random.h"
@@ -78,7 +79,7 @@ bool usingModel = true;
 // returns 0 if traversible (velocity<.5) returns 1 if traversible
 int getLabel()
 {
-    double velocity = getInstantVelocity(esp_timer_get_time());
+    double velocity = getInstantVelocity();
     if (velocity <= 0.5)
     {
         return 0;
@@ -202,6 +203,8 @@ static void control_task(void *pvParameters)
     while (true)
     {
         modelCall();
+        modelLearn(getLabel()); // i moved it from app_main so it runs in the same task as inference
+
         camera_fb_t *frame = esp_camera_fb_get();
         if (frame == nullptr)
         {
@@ -279,6 +282,9 @@ extern "C" void app_main(void)
 
     ESP_LOGI("INFO", "it worked out!");
 
+    littleFSInit();
+    writeToFile("writing test to file");
+
     xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL);
 
     while (1)
@@ -352,6 +358,9 @@ extern "C" void app_main(void)
 
 //     // Just launch the task and let it run
 // 	ESP_LOGI("INFO", "Hopefully, something happened to the model");
+
+// littleFSInit();
+// writeToFile("writing test to file");
 
 //     // app_main can now just chill or handle other things (like WiFi/HTTP)
 //     while(1) { vTaskDelay(pdMS_TO_TICKS(1000));
