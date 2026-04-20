@@ -125,7 +125,9 @@ static void control_task(void *pvParameters)
 		  incorrect++;
 		}
 		std::cout<<"Model was called!"<<std::endl;
-		std::cout<<"Accuracy: "<<((double)correct)/(correct + incorrect)<< " % "<<std::endl;
+		std::cout<<"Accuracy: "<<((double)correct)/(correct + incorrect)<<std::endl;
+
+		writeToFile("Accuracy: "+std::to_string(((double)correct)/(correct + incorrect)));
         modelLearn(label); // i moved it from app_main so it runs in the same task as inference
 		std::cout<<"Continous learning was called label was "+ std::to_string(label);
 
