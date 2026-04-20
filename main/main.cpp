@@ -168,7 +168,13 @@ extern "C" void app_main(void)
         return;
     }
 
+
     xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL); // modellearn() is in here now btw
+
+    // while (1)
+    // {
+    //     vTaskDelay(pdMS_TO_TICKS(1000));
+    // }
 }
 
 // // testing movement without camera
