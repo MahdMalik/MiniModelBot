@@ -74,6 +74,8 @@
 
 static uint8_t s_led_state = 0;
 bool usingModel = true;
+int correct = 0;
+int incorrect = 0;
 
 // returns 0 if traversible (velocity<.5) returns 1 if traversible
 int getLabel()
@@ -114,9 +116,18 @@ static void control_task(void *pvParameters)
     while (true)
     {
         modelCall();
-		std::cout<<"Model was called!";
-        modelLearn(getLabel()); // i moved it from app_main so it runs in the same task as inference
-		std::cout<<"Continous learning was called label was "+ std::to_string(getLabel());
+		// Update the accuracy
+		int label = getLabel();
+		if(((getLastClass1Prob() > 0.50) &&(label == 1)) || ((getLastClass1Prob() < 0.50) && (label == 0))){
+		  correct++;
+		}
+		else{
+		  incorrect++;
+		}
+		std::cout<<"Model was called!"<<std::endl;
+		std::cout<<"Accuracy: "<<((double)correct)/(correct + incorrect)<< " % "<<std::endl;
+        modelLearn(label); // i moved it from app_main so it runs in the same task as inference
+		std::cout<<"Continous learning was called label was "+ std::to_string(label);
 
         camera_fb_t *frame = esp_camera_fb_get();
         if (frame == nullptr)
