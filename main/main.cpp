@@ -101,6 +101,9 @@ extern "C" void app_main(void) {
 
     for (int i = 0; i < 100; i++) {
 		vTaskDelay(pdMS_TO_TICKS(100)); // 100ms * 100 = 10 seconds
+		currentDirection[0] = i;
+		currentDirection[1] = i;
+		move(false);
 	}
 	
 	ESP_LOGI("INFO", "it worked out!");
