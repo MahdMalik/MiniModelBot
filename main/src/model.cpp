@@ -9,6 +9,7 @@
 
 //counter for run numbers
 static int runNumber=0;
+static int totalInfTime=0;
 
 bool modelSetupFailed = false;
 bool isHeadless = true; // true = headless + custom head, false = original headed model
@@ -168,7 +169,7 @@ void modelCall()
     // TODO: send this to file system on esp32
     auto totalInfTime = esp_timer_get_time() - startInfTime;
 
-    writeToFile("Total Inference time: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
+    writeToFile("Total inference time for static model: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
 
     if (inferenceResult != kTfLiteOk)
     {
@@ -217,6 +218,7 @@ float getLastClass1Prob()
 
 void modelLearn(int trueLabel)
 {
+    auto modelLearnStartTime=esp_timer_get_time();
     if (modelSetupFailed)
         return;
 
@@ -249,4 +251,8 @@ void modelLearn(int trueLabel)
     static int trainCount = 0;
     if (++trainCount % 50 == 0)
         customHead->save();
+    auto modelLearnEndTime=esp_timer_get_time();
+    totalInfTime=modelLearnEndTime-modelLearnStartTime;
+    writeToFile("Total inference time for static model and continuous: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
+
 }

@@ -151,6 +151,7 @@ static void control_task(void *pvParameters)
 
 extern "C" void app_main(void)
 {
+	littleFSInit();
     vTaskDelay(pdMS_TO_TICKS(5000));
 
     sensorSetup();
@@ -242,9 +243,6 @@ extern "C" void app_main(void)
 
 //     // Just launch the task and let it run
 // 	ESP_LOGI("INFO", "Hopefully, something happened to the model");
-
-// littleFSInit();
-// writeToFile("writing test to file");
 
 //     // app_main can now just chill or handle other things (like WiFi/HTTP)
 //     while(1) { vTaskDelay(pdMS_TO_TICKS(1000));
