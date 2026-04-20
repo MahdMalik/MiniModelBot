@@ -124,7 +124,7 @@ void actuallyUpdateDuties(ledc_channel_t channel, float chosenDirection)
 
 void move()
 {
-	for (int i = 0; i < 20; i++)
+	for (int i = 0; i < 100; i++)
     {
 		vTaskDelay(pdMS_TO_TICKS(100));
 		currentDirection[0] = i;
@@ -142,7 +142,7 @@ void move()
 }
 //turns the robot right
 void turnRight(){
-	for (int i = 0; i < 20; i++)
+	for (int i = 0; i < 100; i++)
     {
 		vTaskDelay(pdMS_TO_TICKS(100));
 		currentDirection[0] = i;

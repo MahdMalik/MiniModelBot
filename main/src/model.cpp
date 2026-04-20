@@ -1,9 +1,14 @@
 #include "model.h"
 #include "headless_model.h"
 #include "custom_layer.h"
+#include "my_littlefs.h"
+#include <iostream>
 
 #define modelWeights g_model
 #define modelLen g_model_len
+
+//counter for run numbers
+static int runNumber=0;
 
 bool modelSetupFailed = false;
 bool isHeadless = true; // true = headless + custom head, false = original headed model
@@ -161,7 +166,9 @@ void modelCall()
     auto startInfTime = esp_timer_get_time();
     TfLiteStatus inferenceResult = interpreter->Invoke();
     // TODO: send this to file system on esp32
-    auto inferenceTime = esp_timer_get_time() - startInfTime;
+    auto totalInfTime = esp_timer_get_time() - startInfTime;
+
+    writeToFile("Total Inference time: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
 
     if (inferenceResult != kTfLiteOk)
     {
@@ -197,6 +204,9 @@ void modelCall()
 
     // do this or else we'll use up all our memory in PSRAM
     esp_camera_fb_return(theFrame);
+
+    //increment after run works
+    ++runNumber;
 }
 
 float getLastClass1Prob()

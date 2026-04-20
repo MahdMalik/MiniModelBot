@@ -149,7 +149,6 @@ static void control_task(void *pvParameters)
     }
 }
 
-// testing with camera
 extern "C" void app_main(void)
 {
     vTaskDelay(pdMS_TO_TICKS(5000));
