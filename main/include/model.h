@@ -14,7 +14,7 @@
 #include "freertos/task.h"
 
 #include "soc/clk_tree_defs.h"
-#include <unistd.h>			// Close
+#include <unistd.h> // Close
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -44,6 +44,11 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 
 extern bool modelSetupFailed;
+extern bool isHeadless;
+void connectHeadlessModel(const unsigned char* modelData, unsigned int modelLength);
+
+float getLastClass1Prob();
 
 void setupModel();
 void modelCall();
+void modelLearn(int trueLabel);

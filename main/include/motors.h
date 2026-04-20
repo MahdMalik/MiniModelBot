@@ -49,5 +49,6 @@ float getRawDutyFromPercent(float duty);
 uint32_t getRawDutyFromBaseDirection(float direction);
 float convertPulseWidthToPercentDuty(int pulseWidth);
 void actuallyUpdateDuties(ledc_channel_t channel, float chosenDirection);
-void move(bool startup);
+void move();
 void ledc_setup();
+void turnRight();

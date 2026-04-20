@@ -1,5 +1,7 @@
 #include "imu.h"
 #include "driver/i2c_master.h"
+#include "my_littlefs.h"
+#include <iostream>
 
 #define I2C_MASTER_SCL_IO           41
 #define I2C_MASTER_SDA_IO           42
@@ -100,7 +102,6 @@ void sensorSetup()
         ESP_LOGW("BMI270", "Init attempt %d failed: %s", i+1, ec.message().c_str());
         vTaskDelay(pdMS_TO_TICKS(500));
     }
-
     if (!isBmiReady) {
         ESP_LOGE("BMI270", "CRITICAL: Could not find sensor!");
     }
@@ -136,20 +137,21 @@ IMUData getSensorData()
 
 //setup as zero since this will run on startup
 double previous_velocity=0;
+double previous_time=0;
 
-// Pass in esp_timer_get_time() to get current time
 //get instant velocity must be called at the beginning since starting velocity will be zero
-double getInstantVelocity(double previous_time){
+double getInstantVelocity(){
     float dt = 1.0f;
     //checks if the imu is initialized before called
-     if (!isBmiReady) {
+    if (!isBmiReady) {
         printf("Bmi was not initialized with Sensor Setup");
         return {};
     }
 
     //checks if the imu was able to update successfully 
     if (!imu->update(dt, ec)){
-        printf("IMU could not update its values");
+        std::cout<<"IMU could not update its values";
+        // writeToFile("IMU could not update its values");
         return {};
     }
 
@@ -158,9 +160,10 @@ double getInstantVelocity(double previous_time){
     auto y_accel = imu->get_accelerometer().y;
 
     //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
-    auto current_velocity= y_accel * (current_time-previous_time)*(10000) + previous_velocity;
+    auto current_velocity= y_accel * (current_time-previous_time)/(1000000) + previous_velocity;
 
     previous_velocity = current_velocity;
+    previous_time = current_time;
 
     return current_velocity;
 }
