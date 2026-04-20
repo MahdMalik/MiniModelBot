@@ -168,19 +168,7 @@ extern "C" void app_main(void)
         return;
     }
 
-    IMUData newData = getSensorData();
-
-    ESP_LOGI("INFO", "it worked out!");
-
-    littleFSInit(); // moved your stuff from other main function below to here
-    writeToFile("writing test to file");
-
     xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL); // modellearn() is in here now btw
-
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
 }
 
 // // testing movement without camera
