@@ -4,7 +4,6 @@
 #include "my_littlefs.h"
 #include <new>
 #include <iostream>
-#include <vector>
 
 //counter for run numbers
 std::vector<long> inferenceTimes;
@@ -166,7 +165,7 @@ void modelCall()
 
     for (short i = 0; i < theFrame->len; i++)
     {
-        interpreter->input(0)->data.int8[i] = (int8_t)theFrame->buf[i];
+        interpreter->input(0)->data.int8[i] = (int8_t) (theFrame->buf[i] - 128);
     }
     auto startInfTime = esp_timer_get_time();
     TfLiteStatus inferenceResult = interpreter->Invoke();

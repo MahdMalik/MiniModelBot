@@ -43,6 +43,9 @@
 #include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
+#include <vector>
+
+
 extern bool modelSetupFailed;
 
 extern bool isHeadless;
@@ -51,7 +54,6 @@ extern std::vector<long> inferenceTimes;
 extern std::vector<long> learnTimes;
 extern std::vector<bool> correctIncorrectArr;
 
-void connectHeadlessModel(const unsigned char* modelData, unsigned int modelLength);
 void connectModel(const unsigned char* modelData, unsigned int modelLength, bool headlessMode);
 void setHeadlessMode(bool headless);
 
