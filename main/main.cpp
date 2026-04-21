@@ -44,6 +44,7 @@
 #include "camera.h"
 #include "model.h"
 #include "my_littlefs.h"
+#include "esp_system.h"
 
 #include "esp_camera.h"
 #include "esp_random.h"
@@ -74,20 +75,9 @@
 static uint8_t s_led_state = 0;
 bool usingModel = true;
 
-// returns 0 if traversible (velocity<.5) returns 1 if traversible
-int getLabel()
-{
-    double velocity = getInstantVelocity();
-    ESP_LOGI("VELOCITY", "Velocity is %f", velocity);
-    if (velocity <= 0.5)
-    {
-        return 0;
-    }
-    else
-    {
-        return 1;
-    }
-}
+float probabilityToTraverseAnyways = 0.1;
+int runNumber = 0;
+const int maxRuns = 10;
 
 // static const unsigned char *const modelWeights =
 //     _content_drive_MyDrive_ACMResearchDataset_model_model_cnn_int8_tflite;
@@ -111,54 +101,106 @@ void doBlink()
 
 static void control_task(void *pvParameters)
 {
+    bool firstcall = true;
     while (true)
     {
+        bool goingForward = false;
+
         modelCall();
-		// Update the accuracy
-		int label = getLabel();
-		if(((getLastClass1Prob() > 0.50) &&(label == 1)) || ((getLastClass1Prob() < 0.50) && (label == 0))){
-		  correct++;
-		}
-		else{
-		  incorrect++;
-		}
-        ESP_LOGI("CONTROL", "Model was called!");
-        ESP_LOGI("CONTROL", "Accuracy: %f", ((double)correct)/runNumber);
-
-        writeToFile("Accuracy: " + std::to_string((double) correct / runNumber) + 
-            ", avg inf latency (microseconds): " + std::to_string((double) totalInfTime / runNumber) + 
-            ", avg learning latency (microseconds): " + std::to_string((double) totalLearnTime / runNumber));
-		// writeToFile("Accuracy: " + std::to_string((double)correct / runNumber) + ", total inf latency: ");
-        ESP_LOGI("CONTROL", "Continous learning was called label was %s", std::to_string(label).c_str());
-
-        float traversableProb = getLastClass1Prob();
-        ESP_LOGI("CONTROL", "Last Class 1 prob %f", traversableProb);
-
-        stopMotors();
 
         //checking if frame is intraversible
-        if (traversableProb < CONFIDENCE_THRESHOLD)
+        if (getLastClass1Prob() < CONFIDENCE_THRESHOLD)
         {
-			turnRight();
+			float rngGoAnyways = (float)esp_random() / UINT32_MAX;
+            if(rngGoAnyways < probabilityToTraverseAnyways)
+            {
+                moveForward();
+                goingForward = true;
+            }
+            else
+            {
+                turnRight();
+            }
             vTaskDelay(pdMS_TO_TICKS(200));
-			ESP_LOGI("CONTROL", "traversable: %.2f", traversableProb);
-            continue;
+			ESP_LOGI("CONTROL", "traversable: %.2f", getLastClass1Prob());
         }
         //checking if frame is traversible (equal to or above the confidence threshold)
-        else if (traversableProb >= CONFIDENCE_THRESHOLD)
+        else if (getLastClass1Prob() >= CONFIDENCE_THRESHOLD)
         {
             ESP_LOGI("CONTROL", "path is clear, driving forward");
 			moveForward();
+            goingForward = true;
 			vTaskDelay(pdMS_TO_TICKS(200));
 			ESP_LOGI("CONTROL", "path is clear, driving forward");
         }
 
-        if(isHeadless)
-        {
-            modelLearn(label); // i moved it from app_main so it runs in the same task as inference
-        }
         vTaskDelay(pdMS_TO_TICKS(100));
+
+		// get label from last time
+        
+        // Update the accuracy
+
+        int label = getLabel();
+        stopMotors();
+        // accuracy can only be emasured when we 'go forwards'
+        if (goingForward)
+        {
+            
+            if(((getLastClass1Prob() > 0.50) &&(label == 1)) || ((getLastClass1Prob() <= 0.50) && (label == 0)))
+            {
+                correctIncorrectArr.push_back(true);
+            }
+            else
+            {
+                correctIncorrectArr.push_back(false);
+            }
+            ESP_LOGI("CONTROL", "Model was called!");
+            // ESP_LOGI("CONTROL", "Accuracy: %f", ((double)correct)/runNumber);
+
+            // writeToFile("Accuracy: " + std::to_string((double)correct / runNumber) + ", total inf latency: ");
+            ESP_LOGI("CONTROL", "Continous learning was called label was %s", std::to_string(label).c_str());
+            ESP_LOGI("CONTROL", "Last Class 1 prob %f", getLastClass1Prob());
+            if(isHeadless) modelLearn(label); // i moved it from app_main so it runs in the same task as inference
+        }
+
+        runNumber++;
+        if(runNumber == maxRuns)
+        {
+            break;
+        }
     }
+
+    std::string finalString = "Runs Completed!\n\nAccuracy Vector:\n";
+    for(int i = 0; i < correctIncorrectArr.size(); i++)
+    {
+        finalString += std::to_string(correctIncorrectArr[i]) + ",";
+    }
+    // remove trailing comma
+    finalString.pop_back();
+
+    finalString += "\nInference Latency Vector (microseconds):\n";
+
+    for(int i = 0; i < inferenceTimes.size(); i++)
+    {
+        finalString += std::to_string(inferenceTimes[i]) + ",";
+    }
+
+    finalString.pop_back();
+
+    if(isHeadless)
+    {
+        finalString += "\nLearning Backprop Latency Vector (microseconds):\n";
+
+        for(int i = 0; i < learnTimes.size(); i++)
+        {
+            finalString += std::to_string(learnTimes[i]) + ",";
+        }
+        finalString.pop_back();
+    }
+
+    writeToFile(finalString);
+
+    vTaskDelete(NULL); 
 }
 
 extern "C" void app_main(void)

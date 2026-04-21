@@ -110,44 +110,15 @@ void sensorSetup()
 
 IMUData getSensorData()
 {
-    if (isBmiReady)
-    {
-        float dt = 1.0f;
-        auto start = esp_timer_get_time();
-
-        if (imu->update(dt, ec)) {
-            auto accel = imu->get_accelerometer();
-            auto gyro = imu->get_gyroscope();
-
-            ESP_LOGI("IMU", "Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
-                accel.x, accel.y, accel.z,
-                gyro.x, gyro.y, gyro.z);
-
-            auto elapsed = esp_timer_get_time() - start;
-            ESP_LOGI("IMU", "Update time: %lld us\n", elapsed);
-
-            return {
-                accel.x, accel.y, accel.z,
-                gyro.x, gyro.y, gyro.z
-            };
-        }
-    }
-    return {};
-}
-
-//setup as zero since this will run on startup
-double previous_velocity=0;
-double previous_time=0;
-
-//get instant velocity must be called at the beginning since starting velocity will be zero
-double getInstantVelocity(){
-    float dt = 1.0f;
     //checks if the imu is initialized before called
     if (!isBmiReady) {
         ESP_LOGI("IMU ERROR", "Bmi was not initialized with Sensor Setup");
         esp_system_abort("IMU failure");   
         return {};
     }
+
+    float dt = 1.0f;
+    auto start = esp_timer_get_time();
 
     //checks if the imu was able to update successfully 
     if (!imu->update(dt, ec)){
@@ -157,9 +128,51 @@ double getInstantVelocity(){
         return {};
     }
 
+    auto accel = imu->get_accelerometer();
+    auto gyro = imu->get_gyroscope();
+
+    ESP_LOGI("IMU", "Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
+        accel.x, accel.y, accel.z,
+        gyro.x, gyro.y, gyro.z);
+
+    auto elapsed = esp_timer_get_time() - start;
+    ESP_LOGI("IMU", "Update time: %lld us\n", elapsed);
+
+    return {
+        accel.x, accel.y, accel.z,
+        gyro.x, gyro.y, gyro.z
+    };
+    
+}
+
+//setup as zero since this will run on startup
+double previous_velocity=0;
+double previous_time=0;
+
+// returns 0 if not traversible (velocity<.5) returns 1 if it was traversible
+int getLabel()
+{
+    double velocity = getInstantVelocity();
+    ESP_LOGI("VELOCITY", "Velocity is %f", velocity);
+    if (velocity <= 0.5)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+//get instant velocity must be called at the beginning since starting velocity will be zero
+double getInstantVelocity(){
+    float dt = 1.0f;
+
     //actually calculating velocity now
     auto current_time = esp_timer_get_time();
-    auto y_accel = imu->get_accelerometer().y;
+    IMUData data = getSensorData();
+    float y_accel = data.ay;
+    // auto y_accel = imu->get_accelerometer().y;
 
     //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
     auto current_velocity= y_accel * (current_time-previous_time)/(1000000) + previous_velocity;

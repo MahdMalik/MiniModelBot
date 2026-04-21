@@ -4,17 +4,15 @@
 #include "my_littlefs.h"
 #include <new>
 #include <iostream>
+#include <vector>
 
 //counter for run numbers
-int runNumber = 0;
-int totalInfTime = 0;
-int totalLearnTime = 0;
-int correct = 0;
-int incorrect = 0;
-
+std::vector<long> inferenceTimes;
+std::vector<long> learnTimes;
+std::vector<bool> correctIncorrectArr;
 
 bool modelSetupFailed = false;
-bool isHeadless = true; // true = headless + custom head, false = original headed model
+bool isHeadless = false; // true = headless + custom head, false = original headed model
 
 static CustomHead *customHead = nullptr;
 
@@ -172,9 +170,8 @@ void modelCall()
     }
     auto startInfTime = esp_timer_get_time();
     TfLiteStatus inferenceResult = interpreter->Invoke();
-    // TODO: send this to file system on esp32
 
-    totalInfTime += esp_timer_get_time() - startInfTime;
+    inferenceTimes.push_back(esp_timer_get_time() - startInfTime);
 
     // writeToFile("Total inference time (microseconds) for static model: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
 
@@ -196,9 +193,9 @@ void modelCall()
         auto features = extractFeatures();
         auto probs = customHead->forward(features);
 
-        class0Prob = probs[0];
+        class1Prob = probs[0];
         // class1Prob = probs[1];
-        class1Prob = 1 - probs[0];
+        class0Prob = 1 - probs[0];
 
         ESP_LOGI("MODEL", "Loss: %.4f", BCE_Loss(probs, class0Prob > class1Prob ? 0 : 1));
     }
@@ -247,9 +244,6 @@ void modelCall()
 
     // do this or else we'll use up all our memory in PSRAM
     esp_camera_fb_return(theFrame);
-
-    //increment after run works
-    ++runNumber;
 }
 
 float getLastClass1Prob()
@@ -260,6 +254,7 @@ float getLastClass1Prob()
 
 void modelLearn(int trueLabel)
 {
+    return;
     auto modelLearnStartTime=esp_timer_get_time();
     if (modelSetupFailed)
     {
@@ -275,8 +270,9 @@ void modelLearn(int trueLabel)
 
     auto features = extractFeatures();
     customHead->train(features, trueLabel);
-    totalLearnTime+= esp_timer_get_time()-modelLearnStartTime;
-    ESP_LOGI("MODEL", "total learn time was %d", totalLearnTime);
+
+    learnTimes.push_back(esp_timer_get_time() - modelLearnStartTime);
+    ESP_LOGI("MODEL", "total learn time was %d", (int)(esp_timer_get_time() - modelLearnStartTime));
 
     static int trainCount = 0;
     if (++trainCount % 10 == 0 && keepingUpdatedModel)

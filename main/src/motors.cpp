@@ -130,7 +130,7 @@ void turnRight(){
         currentDirection[1] = -i;
 		move();
 
-        ESP_LOGI("Motors", "Setting power: %d", i);
+        // ESP_LOGI("Motors", "Setting power: %d", i);
     }
 	for (int i = 100; i >= 0; i--)
     {
@@ -139,7 +139,7 @@ void turnRight(){
         currentDirection[1] = -i;
 		move();
 
-        ESP_LOGI("Motors", "Setting power: %d", i);
+        // ESP_LOGI("Motors", "Setting power: %d", i);
     }
 
 }
@@ -153,7 +153,7 @@ void moveForward()
         currentDirection[1] = i;
 		move();
 
-        ESP_LOGI("Motors", "Setting power: %d", i);
+        // ESP_LOGI("Motors", "Setting power: %d", i);
     }
 
 }
@@ -167,7 +167,7 @@ void stopMotors()
 		currentDirection[1] += currentDirection[1] < 0 ? -1 : 1;
 		move();
 
-		ESP_LOGI("Motors", "Setting power: %d", i);
+		// ESP_LOGI("Motors", "Setting power: %d", i);
 	}
 }
 

@@ -44,12 +44,13 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 
 extern bool modelSetupFailed;
-extern int correct;
-extern int incorrect;
+
 extern bool isHeadless;
-extern int runNumber;
-extern int totalInfTime;
-extern int totalLearnTime;
+
+extern std::vector<long> inferenceTimes;
+extern std::vector<long> learnTimes;
+extern std::vector<bool> correctIncorrectArr;
+
 void connectHeadlessModel(const unsigned char* modelData, unsigned int modelLength);
 void connectModel(const unsigned char* modelData, unsigned int modelLength, bool headlessMode);
 void setHeadlessMode(bool headless);
