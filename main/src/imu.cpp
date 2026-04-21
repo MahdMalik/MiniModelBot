@@ -171,8 +171,9 @@ double getInstantVelocity(){
     //actually calculating velocity now
     auto current_time = esp_timer_get_time();
     IMUData data = getSensorData();
+    // divided by gravity, but i don't think we do that actually?
+    // float y_accel = data.ay / 9.81;
     float y_accel = data.ay;
-    // auto y_accel = imu->get_accelerometer().y;
 
     //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
     auto current_velocity= y_accel * (current_time-previous_time)/(1000000) + previous_velocity;
