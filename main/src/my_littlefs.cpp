@@ -17,7 +17,6 @@
 #include "esp_littlefs.h"
 #include <fstream>
 #include <iostream>
-#include <fstream>
 #include <sstream>
 #include <string>
 #include "my_littlefs.h"
