@@ -52,7 +52,6 @@
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 // #include "tensorflow/lite/system_setup.h"
-#include "model_data.h"
 
 #define PORT 30000
 #define KEEPALIVE_IDLE CONFIG_KEEPALIVE_IDLE
@@ -74,13 +73,12 @@
 
 static uint8_t s_led_state = 0;
 bool usingModel = true;
-int correct = 0;
-int incorrect = 0;
 
 // returns 0 if traversible (velocity<.5) returns 1 if traversible
 int getLabel()
 {
     double velocity = getInstantVelocity();
+    ESP_LOGI("VELOCITY", "Velocity is %f", velocity);
     if (velocity <= 0.5)
     {
         return 0;
@@ -124,24 +122,19 @@ static void control_task(void *pvParameters)
 		else{
 		  incorrect++;
 		}
-		std::cout<<"Model was called!"<<std::endl;
-		std::cout<<"Accuracy: "<<((double)correct)/(correct + incorrect)<<std::endl;
+        ESP_LOGI("CONTROL", "Model was called!");
+        ESP_LOGI("CONTROL", "Accuracy: %f", ((double)correct)/runNumber);
 
-		writeToFile("Accuracy: "+std::to_string(((double)correct)/(correct + incorrect)));
-        modelLearn(label); // i moved it from app_main so it runs in the same task as inference
-		std::cout<<"Continous learning was called label was "+ std::to_string(label);
-
-        camera_fb_t *frame = esp_camera_fb_get();
-        if (frame == nullptr)
-        {
-            ESP_LOGE("CAMERA", "Camera capture failed");
-            vTaskDelay(pdMS_TO_TICKS(100));
-            continue;
-        }
+        writeToFile("Accuracy: " + std::to_string((double) correct / runNumber) + 
+            ", avg inf latency (microseconds): " + std::to_string((double) totalInfTime / runNumber) + 
+            ", avg learning latency (microseconds): " + std::to_string((double) totalLearnTime / runNumber));
+		// writeToFile("Accuracy: " + std::to_string((double)correct / runNumber) + ", total inf latency: ");
+        ESP_LOGI("CONTROL", "Continous learning was called label was %s", std::to_string(label).c_str());
 
         float traversableProb = getLastClass1Prob();
-		std::cout<<"Last Class 1 prob "+ std::to_string(traversableProb);
-        esp_camera_fb_return(frame);
+        ESP_LOGI("CONTROL", "Last Class 1 prob %f", traversableProb);
+
+        stopMotors();
 
         //checking if frame is intraversible
         if (traversableProb < CONFIDENCE_THRESHOLD)
@@ -155,23 +148,31 @@ static void control_task(void *pvParameters)
         else if (traversableProb >= CONFIDENCE_THRESHOLD)
         {
             ESP_LOGI("CONTROL", "path is clear, driving forward");
-			move();
+			moveForward();
 			vTaskDelay(pdMS_TO_TICKS(200));
 			ESP_LOGI("CONTROL", "path is clear, driving forward");
         }
+
+        if(isHeadless)
+        {
+            modelLearn(label); // i moved it from app_main so it runs in the same task as inference
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
 extern "C" void app_main(void)
 {
 	littleFSInit();
+    std::string contents = readFromFile(0); // Reads "/littlefs/0.txt"
+    ESP_LOGI("FS", "File contents: %s", contents.c_str());
     vTaskDelay(pdMS_TO_TICKS(5000));
 
     sensorSetup();
     cameraInit();
     if (usingModel)
     {
-        connectHeadlessModel(g_model, g_model_len);
+        connectModel(g_model, g_model_len, isHeadless);
         setupModel();
     }
     ledc_setup();
@@ -184,87 +185,4 @@ extern "C" void app_main(void)
 
 
     xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL); // modellearn() is in here now btw
-
-    // while (1)
-    // {
-    //     vTaskDelay(pdMS_TO_TICKS(1000));
-    // }
 }
-
-// // testing movement without camera
-// extern "C" void app_main(void)
-// {
-//     vTaskDelay(pdMS_TO_TICKS(5000));
-
-//     //sensorSetup();
-//     //cameraInit();
-//     ledc_setup();
-
-//     /*if (!isBmiReady || gotError)
-//     {
-//         ESP_LOGE("MAIN", "Setup failed");
-//         return;
-//     }
-//     */
-//     ESP_LOGI("MAIN", "Starting motor test loop");
-
-//     // ramp motor up to move forward
-//     for (int i =0; i < 20; i++) {
-//         vTaskDelay(pdMS_TO_TICKS(100));
-//         currentDirection[0] = i;
-//         currentDirection[1] = i;
-//         ESP_LOGI("MAIN", "Setting power: %d", i);
-
-//         move(false);
-//     }
-
-//     while (true)
-//     {
-//         vTaskDelay(pdMS_TO_TICKS(100));
-
-//         // --- Stop briefly ---
-//         currentDirection[0] = 0;
-//         currentDirection[1] = 0;
-//         move(false);
-//         vTaskDelay(pdMS_TO_TICKS(300));
-
-//         // Random rotate left or right
-//         int turnDir = (esp_random() & 1) ? 1 : -1;
-//         ESP_LOGI("MAIN", "Rotating %s...", turnDir == 1 ? "right" : "left");
-//         currentDirection[0] = 100 * turnDir;
-//         currentDirection[1] = 100 * -turnDir;
-//         move(false);
-//         vTaskDelay(pdMS_TO_TICKS(5000));
-
-//         //Stop briefly before next forward movement
-//         currentDirection[0] = 0;
-//         currentDirection[1] = 0;
-//         move(false);
-//         vTaskDelay(pdMS_TO_TICKS(300));
-//     }
-// }
-
-// //should retry if not ready,
-// if(!isBmiReady || gotError || modelSetupFailed)
-// {
-//     return;
-// }
-
-// IMUData newData = getSensorData();
-
-// 	ESP_LOGI("INFO", "it worked out!");
-
-//     // Just launch the task and let it run
-// 	ESP_LOGI("INFO", "Hopefully, something happened to the model");
-
-//     // app_main can now just chill or handle other things (like WiFi/HTTP)
-//     while(1) { vTaskDelay(pdMS_TO_TICKS(1000));
-// 		if (usingModel)
-// 		{
-// 			modelCall();
-
-// 			// Uncomment when you have a label source (button, serial, MQTT, etc.)
-// 			modelLearn(getLabel());
-// 		}
-// 	}
-// }

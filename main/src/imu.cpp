@@ -119,12 +119,12 @@ IMUData getSensorData()
             auto accel = imu->get_accelerometer();
             auto gyro = imu->get_gyroscope();
 
-            printf("Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
+            ESP_LOGI("IMU", "Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
                 accel.x, accel.y, accel.z,
                 gyro.x, gyro.y, gyro.z);
 
             auto elapsed = esp_timer_get_time() - start;
-            printf("Update time: %lld us\n", elapsed);
+            ESP_LOGI("IMU", "Update time: %lld us\n", elapsed);
 
             return {
                 accel.x, accel.y, accel.z,
@@ -144,14 +144,16 @@ double getInstantVelocity(){
     float dt = 1.0f;
     //checks if the imu is initialized before called
     if (!isBmiReady) {
-        printf("Bmi was not initialized with Sensor Setup");
+        ESP_LOGI("IMU ERROR", "Bmi was not initialized with Sensor Setup");
+        esp_system_abort("IMU failure");   
         return {};
     }
 
     //checks if the imu was able to update successfully 
     if (!imu->update(dt, ec)){
-        std::cout<<"IMU could not update its values";
+        ESP_LOGI("IMU ERROR", "IMU could not update its values");
         // writeToFile("IMU could not update its values");
+        esp_system_abort("IMU failure");   
         return {};
     }
 

@@ -1,9 +1,9 @@
 # so, to import a model to an esp, you need to basically import it as a a C array. what we're doing is taking the binary file and making it an array now like this
 
 from pathlib import Path
-model = Path("alt_cnn_model_uint8.tflite").read_bytes()
+model = Path("final_model.tflite").read_bytes()
 
-ouputFile = Path("EspIdfCode/main/model_data.cpp")
+ouputFile = Path("main/include/model_data.h")
 
 with open(ouputFile, "w") as f:
     # begin writing the array
@@ -17,7 +17,7 @@ with open(ouputFile, "w") as f:
             f.write("\n")
     f.write("\n};\n")
     # actually have to save the length separately cause .size doesn't work on C arrays allegedly?
-    f.write(f"extern \"C\" const unsigned int modelLen = {len(model)};\n")
+    f.write(f"extern \"C\" const unsigned int modelWeights_len = {len(model)};\n")
 
 print(f"Conversion done!")
 

@@ -111,40 +111,66 @@ void actuallyUpdateDuties(ledc_channel_t channel, float chosenDirection)
 	ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, channel));
 }
 
-void move()
-{
-	for (int i = 0; i < 100; i++)
-    {
-		vTaskDelay(pdMS_TO_TICKS(100));
-		currentDirection[0] = i;
-        currentDirection[1] = i;
+void move(){
+	actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(currentDirection[0]));
+	actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
+	actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
+	actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
 
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
-
-        ESP_LOGI("Motors", "Setting power: %d", i);
-    }
-	// ACTUAL DUTIES ARE: 56-89 FOR FORWARD (INCLUSIVE)
-	// AND THEN 16 TO 49 FOR REVERSE (INCLUSIVE), 16 IS FASTER THAN 49
+    //ACTUAL DUTIES ARE: 56-89 FOR FORWARD (INCLUSIVE)
+	//AND THEN 16 TO 49 FOR REVERSE (INCLUSIVE), 16 IS FASTER THAN 49
 }
+
 //turns the robot right
 void turnRight(){
-	for (int i = 0; i < 100; i++)
+	for (int i = 0; i <= 100; i++)
     {
-		vTaskDelay(pdMS_TO_TICKS(100));
+		vTaskDelay(pdMS_TO_TICKS(10));
 		currentDirection[0] = i;
-        currentDirection[1] = i;
-
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_FRONT, getRawDutyFromBaseDirection(-currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_LEFT_BACK, getRawDutyFromBaseDirection(-currentDirection[0]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_FRONT, getRawDutyFromBaseDirection(-currentDirection[1]));
-		actuallyUpdateDuties(LEDC_CHANNEL_RIGHT_BACK, getRawDutyFromBaseDirection(-currentDirection[1]));
+        currentDirection[1] = -i;
+		move();
 
         ESP_LOGI("Motors", "Setting power: %d", i);
     }
+	for (int i = 100; i >= 0; i--)
+    {
+		vTaskDelay(pdMS_TO_TICKS(10));
+		currentDirection[0] = i;
+        currentDirection[1] = -i;
+		move();
+
+        ESP_LOGI("Motors", "Setting power: %d", i);
+    }
+
 }
+
+void moveForward()
+{
+	for (int i = 0; i <= 30; i++)
+    {
+		vTaskDelay(pdMS_TO_TICKS(10));
+		currentDirection[0] = i;
+        currentDirection[1] = i;
+		move();
+
+        ESP_LOGI("Motors", "Setting power: %d", i);
+    }
+
+}
+
+void stopMotors()
+{
+	for(int i = (int) fabs(currentDirection[0]); i >= 0; i--)
+	{
+		vTaskDelay(pdMS_TO_TICKS(10));
+		currentDirection[0] += currentDirection[0] < 0 ? -1 : 1;
+		currentDirection[1] += currentDirection[1] < 0 ? -1 : 1;
+		move();
+
+		ESP_LOGI("Motors", "Setting power: %d", i);
+	}
+}
+
 // sets up the PWM pins and timer
 void ledc_setup()
 {
