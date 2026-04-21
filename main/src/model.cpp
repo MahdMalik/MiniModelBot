@@ -11,7 +11,7 @@ std::vector<long> learnTimes;
 std::vector<bool> correctIncorrectArr;
 
 bool modelSetupFailed = false;
-bool isHeadless = false; // true = headless + custom head, false = original headed model
+bool isHeadless = true; // true = headless + custom head, false = original headed model
 
 static CustomHead *customHead = nullptr;
 
