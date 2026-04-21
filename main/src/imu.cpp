@@ -141,10 +141,10 @@ double previous_time=0;
 
 //get instant velocity must be called at the beginning since starting velocity will be zero
 double getInstantVelocity(){
-    float dt = 1.0f;
+    int64_t dt = 1.0f;
     //checks if the imu is initialized before called
     if (!isBmiReady) {
-        printf("Bmi was not initialized with Sensor Setup");
+        std::cout<<("Bmi was not initialized with Sensor Setup");
         return {};
     }
 
@@ -156,8 +156,9 @@ double getInstantVelocity(){
     }
 
     //actually calculating velocity now
-    auto current_time = esp_timer_get_time();
-    auto y_accel = imu->get_accelerometer().y;
+    int64_t current_time = esp_timer_get_time();
+    //convert it to regular acceleration and not in g's
+    auto y_accel = imu->get_accelerometer().y/9.81;
 
     //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
     auto current_velocity= y_accel * (current_time-previous_time)/(1000000) + previous_velocity;
