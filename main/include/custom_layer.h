@@ -25,7 +25,7 @@ struct DenseLayer{
   vector<float> m_b, v_b; // first/second moment for biases
   int timeStep = 0;
   
-  float learning_rate = 0.001f;
+  float learning_rate = 0.005f;
   float beta1 = 0.9f;
   float beta2 = 0.999f;
   float epsilon = 1e-8f;
@@ -34,22 +34,21 @@ struct DenseLayer{
   void initFromLoadedModel(int inSize, int outSize);
   void initRandom(int inSize, int outSize);
   vector<float> forward(const vector<float> &input, bool isLastLayer = false);
-  void backward(const vector<float> &input, const vector<float> &output, const vector<float> &gradOutput);
+  void backward(const vector<float> &input, const vector<float> &output, const vector<float> &gradOutput, bool isLastLayer = false);
   bool saveToNVS(const char* key);
   bool loadFromNVS(const char* key);
 };
 
-// The full custom head: 2 dense layers...
+// The custom head: a single dense layer
 struct CustomHead{
-  DenseLayer layer1;
-  DenseLayer layer2;
+  DenseLayer layer;
 
-  vector<float> lastHidden;
-
-  void init(int featureSize);
+  void init(int featureSize, int outputSize);
   vector<float> forward(const vector<float> &features);
   void backward(const vector<float>& features, const vector<float>& probs, int label);
   void train(const vector<float> &features, int label);
   void save();
   void load();
 };
+
+extern bool keepingUpdatedModel;

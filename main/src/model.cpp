@@ -2,23 +2,19 @@
 #include "headless_model.h"
 #include "custom_layer.h"
 #include "my_littlefs.h"
+#include <new>
 #include <iostream>
-
-#define modelWeights g_model
-#define modelLen g_model_len
+#include <vector>
 
 //counter for run numbers
-static int runNumber=0;
-static int totalInfTime=0;
+std::vector<long> inferenceTimes;
+std::vector<long> learnTimes;
+std::vector<bool> correctIncorrectArr;
 
 bool modelSetupFailed = false;
-bool isHeadless = true; // true = headless + custom head, false = original headed model
+bool isHeadless = false; // true = headless + custom head, false = original headed model
 
 static CustomHead *customHead = nullptr;
-
-// saying extern on these lets us know that we should find them in another file
-extern const unsigned char modelWeights[];
-extern const unsigned int modelLen;
 
 uint8_t *tensorMemoryArea = nullptr;
 const int tensorMemorySize = 730 * 1024; // 300KB - plenty of room in PSRAM
@@ -26,21 +22,26 @@ static float lastClass1Prob = 0.0f;
 
 const tflite::Model *model = nullptr;
 static tflite::MicroMutableOpResolver<5> operationsManager;
-alignas(tflite::MicroInterpreter) uint8_t buffer[sizeof(tflite::MicroInterpreter)];
 static tflite::MicroInterpreter *interpreter = nullptr;
 
-float theOutputScale;
-int32_t theOutputZeroPoint;
+float theOutputScale = 0.0f;
+int32_t theOutputZeroPoint = 0;
 
 const unsigned char *connectedModel = nullptr;
 unsigned int connectedModelLen = 0;
 
-void connectHeadlessModel(const unsigned char *modelData, unsigned int modelLength)
+void setHeadlessMode(bool headless)
 {
+    isHeadless = headless;
+}
+
+void connectModel(const unsigned char *modelData, unsigned int modelLength, bool headlessMode)
+{
+    setHeadlessMode(headlessMode);
     connectedModel = modelData;
     connectedModelLen = modelLength;
 
-    CustomPrint("MODEL", "Model connected! Size: %d bytes", connectedModelLen);
+    CustomPrint("MODEL", "Model connected! Size: %d bytes (%s mode)", connectedModelLen, isHeadless ? "HEADLESS" : "FULL");
 }
 
 std::vector<float> extractFeatures()
@@ -62,13 +63,18 @@ std::vector<float> extractFeatures()
 void setupModel()
 {
     tensorMemoryArea = (uint8_t *)heap_caps_malloc(tensorMemorySize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    customHead = new CustomHead();
-    customHead->init(32);
     if (tensorMemoryArea == nullptr)
     {
         CustomPrint("MODEL", "PSRAM Allocation failed! Is PSRAM enabled in menuconfig?");
         modelSetupFailed = true;
         return;
+    }
+
+    if (isHeadless)
+    {
+        customHead = new CustomHead();
+        // customHead->load();
+        customHead->init(36, 1); // feature size, output size
     }
 
     if (connectedModel == nullptr)
@@ -101,7 +107,7 @@ void setupModel()
         CustomPrint("MODEL", "Added op scucessfully (?)");
     }
 
-    interpreter = new (buffer) tflite::MicroInterpreter(
+    interpreter = new tflite::MicroInterpreter(
         model, operationsManager, tensorMemoryArea, tensorMemorySize);
 
     // Allocate memory from the tensor_arena
@@ -129,13 +135,11 @@ void setupModel()
 
     if (!modelSetupFailed)
     {
-        // Only grab output scale/zp for the headed model
-        // headless model output goes through extractFeatures() instead
         if (!isHeadless)
         {
-            // TODO: fill in correct tensor index once headed model is inspected
-            // theOutputScale = interpreter->output(0)->params.scale;
-            // theOutputZeroPoint = interpreter->output(0)->params.zero_point;
+            TfLiteTensor *output = interpreter->output(0);
+            theOutputScale = output->params.scale;
+            theOutputZeroPoint = output->params.zero_point;
         }
 
         CustomPrint("MODEL", "thing worked out ok regarding the model!");
@@ -166,10 +170,10 @@ void modelCall()
     }
     auto startInfTime = esp_timer_get_time();
     TfLiteStatus inferenceResult = interpreter->Invoke();
-    // TODO: send this to file system on esp32
-    auto totalInfTime = esp_timer_get_time() - startInfTime;
 
-    writeToFile("Total inference time for static model: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
+    inferenceTimes.push_back(esp_timer_get_time() - startInfTime);
+
+    // writeToFile("Total inference time (microseconds) for static model: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
 
     if (inferenceResult != kTfLiteOk)
     {
@@ -181,33 +185,65 @@ void modelCall()
         CustomPrint("MODEL", "INVOCATION WORKED!!!! HALLELUJAH!!");
     }
 
+    float class0Prob = 0;
+    float class1Prob = 0;
     if (isHeadless)
     {
         // route through custom head for inference
         auto features = extractFeatures();
         auto probs = customHead->forward(features);
-        CustomPrint("MODEL", "Class 0: %.3f  Class 1: %.3f", probs[0], probs[1]);
-        CustomPrint("MODEL", "Loss: %.4f", BCE_Loss(probs, probs[0] > probs[1] ? 0 : 1));
+
+        class1Prob = probs[0];
+        // class1Prob = probs[1];
+        class0Prob = 1 - probs[0];
+
+        ESP_LOGI("MODEL", "Loss: %.4f", BCE_Loss(probs, class0Prob > class1Prob ? 0 : 1));
     }
     else
     {
-        // TODO: fill in correct output tensor index once headed model is inspected
-        int8_t stillQuantizedOutputClass0 = interpreter->output(0)->data.int8[0];
+        TfLiteTensor *output = interpreter->output(0);
+        int outputElements = 1;
+        for (int i = 0; i < output->dims->size; ++i)
+            outputElements *= output->dims->data[i];
 
-        // unquantize it this way, get class 1 prob from it easily then
-        float class0Prob = (float)(stillQuantizedOutputClass0 - theOutputZeroPoint) * theOutputScale;
-        float class1Prob = 1 - class0Prob;
-        lastClass1Prob = class1Prob;
-
-        CustomPrint("MODEL", "The probability of class 0 is is %f\n", class0Prob);
-        CustomPrint("MODEL", "The probability of class 1 is is %f\n", class1Prob);
+        if (output->type == kTfLiteInt8)
+        {
+            if (outputElements >= 2)
+            {
+                class0Prob = (output->data.int8[0] - output->params.zero_point) * output->params.scale;
+                class1Prob = (output->data.int8[1] - output->params.zero_point) * output->params.scale;
+            }
+            else if (outputElements == 1)
+            {
+                class0Prob = (output->data.int8[0] - output->params.zero_point) * output->params.scale;
+                class1Prob = 1 - class0Prob;
+            }
+        }
+        else if (output->type == kTfLiteFloat32)
+        {
+            if (outputElements >= 2)
+            {
+                class0Prob = output->data.f[0];
+                class1Prob = output->data.f[1];
+            }
+            else if (outputElements == 1)
+            {
+                class0Prob = output->data.f[0];
+                class1Prob = 1 - class0Prob;
+            }
+        }
+        else
+        {
+            CustomPrint("MODEL", "Unsupported output tensor type %d", output->type);
+        }
     }
+
+    ESP_LOGI("MODEL", "Class 0: %.3f  Class 1: %.3f", class0Prob, class1Prob);
+
+    lastClass1Prob = class1Prob;
 
     // do this or else we'll use up all our memory in PSRAM
     esp_camera_fb_return(theFrame);
-
-    //increment after run works
-    ++runNumber;
 }
 
 float getLastClass1Prob()
@@ -218,9 +254,13 @@ float getLastClass1Prob()
 
 void modelLearn(int trueLabel)
 {
+    return;
     auto modelLearnStartTime=esp_timer_get_time();
     if (modelSetupFailed)
+    {
         return;
+    }
+        
 
     if (!isHeadless)
     {
@@ -228,31 +268,15 @@ void modelLearn(int trueLabel)
         return;
     }
 
-    camera_fb_t *theFrame = getCamFrame();
-
-    for (short i = 0; i < theFrame->len; i++)
-        interpreter->input(0)->data.int8[i] = (int8_t)theFrame->buf[i];
-
-    TfLiteStatus inferenceResult = interpreter->Invoke();
-    if (inferenceResult != kTfLiteOk)
-    {
-        CustomPrint("MODEL", "Invoke failed during learn!");
-        // do this or else we'll use up all our memory in PSRAM
-        esp_camera_fb_return(theFrame);
-        return;
-    }
-
-    // do this or else we'll use up all our memory in PSRAM
-    esp_camera_fb_return(theFrame);
-
     auto features = extractFeatures();
     customHead->train(features, trueLabel);
 
-    static int trainCount = 0;
-    if (++trainCount % 50 == 0)
-        customHead->save();
-    auto modelLearnEndTime=esp_timer_get_time();
-    totalInfTime=modelLearnEndTime-modelLearnStartTime;
-    writeToFile("Total inference time for static model and continuous: "+ std::to_string(totalInfTime)+"\nRun number: " +std::to_string(runNumber));
+    learnTimes.push_back(esp_timer_get_time() - modelLearnStartTime);
+    ESP_LOGI("MODEL", "total learn time was %d", (int)(esp_timer_get_time() - modelLearnStartTime));
 
+    static int trainCount = 0;
+    if (++trainCount % 10 == 0 && keepingUpdatedModel)
+        customHead->save();
+    // writeToFile("Total inference time for static model and continuous: "+ std::to_string(totalLearnTime)+"\nRun number: " +std::to_string(runNumber));
+    ESP_LOGI("CONTINUOUS LEARNING", "CONTINUOUS LEARNING SUCCESS!");
 }

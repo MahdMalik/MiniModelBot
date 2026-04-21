@@ -6,3 +6,4 @@ void littleFSInit();
 void getLFSPartitionInfo();
 void writeToFile(std::string data);
 void moveToNewFile();
+std::string readFromFile(long fileNum);

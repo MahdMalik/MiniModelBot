@@ -17,7 +17,8 @@
 #include "esp_littlefs.h"
 #include <fstream>
 #include <iostream>
-
+#include <sstream>
+#include <string>
 #include "my_littlefs.h"
 
 
@@ -34,7 +35,7 @@ constexpr esp_vfs_littlefs_conf_t conf = {
 
 //initializes the file system
 void littleFSInit(){
-    std::cout<<("Initializing LittleFS");
+    ESP_LOGI("FS", "Initializing LittleFS");
 
     // Use settings defined above to initialize and mount LittleFS filesystem at /littlefs.
     // Note: esp_vfs_littlefs_register is an all-in-one convenience function.
@@ -70,7 +71,7 @@ static long fileNumber = 0;
 //takes STRING data in to file + file number name
 void writeToFile(std::string data){
     auto startTime=esp_timer_get_time();
-    std::cout<<("Opening file");
+    ESP_LOGI("FS", "Opening file");
 
     std::string pathName="/littlefs/"+std::to_string(fileNumber) +".txt";
 
@@ -79,7 +80,7 @@ void writeToFile(std::string data){
     MyFile << data;
     MyFile.close();
     auto endTime = ((esp_timer_get_time()-startTime));
-    std::cout<<"File written in "+std::to_string(endTime)+" microseconds\n";
+    ESP_LOGI("FS", "File written in %s microseconds", std::to_string(endTime).c_str());
 }
 
 //seperated this so that way I can write without having to reopen and close each time
@@ -90,5 +91,18 @@ void writeToFile(std::string data){
 //creates file directory at file 1
 void moveToNewFile(){
     ++fileNumber;
-    std::cout<<"Current file name changed to "<< fileNumber<<" file";
+    ESP_LOGI("FS", "Current file name changed to %ld file", fileNumber);
+}
+
+std::string readFromFile(long fileNum) {
+    std::string pathName = "/littlefs/" + std::to_string(fileNum) + ".txt";
+    std::ifstream MyFile(pathName);
+    if (!MyFile.is_open()) {
+        ESP_LOGE("FS", "Failed to open file: %s", pathName.c_str());
+        return "";
+    }
+    std::stringstream buffer;
+    buffer << MyFile.rdbuf();
+    MyFile.close();
+    return buffer.str();
 }

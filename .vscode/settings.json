@@ -1,7 +1,5 @@
 {
-    "idf.currentSetup": "C:\\esp\\v5.5.3\\esp-idf",
-    "idf.flashType": "UART",
-    "idf.portWin": "COM10",
-    "idf.monitorPort": "COM10",
-    "idf.port": "/dev/ttyUSB0"
+    "idf.currentSetup": "C:\\Users\\mahd\\esp\\v5.4\\esp-idf",
+    "idf.portWin": "COM40",
+    "idf.flashType": "UART"
 }

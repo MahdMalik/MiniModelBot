@@ -52,3 +52,5 @@ void actuallyUpdateDuties(ledc_channel_t channel, float chosenDirection);
 void move();
 void ledc_setup();
 void turnRight();
+void moveForward();
+void stopMotors();

@@ -53,4 +53,5 @@ void sensorSetup();
 
 IMUData getSensorData();
 
+int getLabel();
 double getInstantVelocity();
