@@ -74,7 +74,7 @@ bool usingModel = true;
 
 float probabilityToTraverseAnyways = 0.1;
 int runNumber = 0;
-const int maxRuns = 10;
+const int maxRuns = 100;
 
 // static const unsigned char *const modelWeights =
 //     _content_drive_MyDrive_ACMResearchDataset_model_model_cnn_int8_tflite;

@@ -22,7 +22,7 @@ static std::atomic<bool> mainTaskDestroyed(false);
 
 float acceleration_deadband = 0.05;
 float accel_y_bias = 0;
-const float velocityThreshold = 0.25f;
+const float velocityThreshold = 0.1f;
 
 RobotIMU::Config bmi_config = {
     .device_address = BMI270_ADDR,
