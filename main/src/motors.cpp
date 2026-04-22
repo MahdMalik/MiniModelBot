@@ -146,7 +146,7 @@ void turnRight(){
 
 void moveForward()
 {
-	for (int i = 0; i <= 30; i++)
+	for (int i = 0; i <= 20; i++)
     {
 		vTaskDelay(pdMS_TO_TICKS(10));
 		currentDirection[0] = i;

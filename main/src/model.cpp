@@ -166,6 +166,10 @@ void modelCall()
 {
     camera_fb_t *theFrame = getCamFrame();
 
+    // TfLiteTensor* input = interpreter->input(0);
+    // ESP_LOGI("MODEL", "Input zero_point: %d, scale: %f",
+    //      (int)input->params.zero_point, input->params.scale);
+
     for (short i = 0; i < theFrame->len; i++)
     {
         interpreter->input(0)->data.int8[i] = (int8_t) (theFrame->buf[i] - 128);

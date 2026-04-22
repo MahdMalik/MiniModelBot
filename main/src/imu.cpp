@@ -22,7 +22,7 @@ static std::atomic<bool> mainTaskDestroyed(false);
 
 float acceleration_deadband = 0.05;
 float accel_y_bias = 0;
-const float velocityThreshold = 0.1f;
+const float velocityThreshold = 0.0001f;
 
 RobotIMU::Config bmi_config = {
     .device_address = BMI270_ADDR,
@@ -226,7 +226,7 @@ void imu_task(void *pvParameters)
    {
         //LARP LARP LAPR SAHUR!!!
         calculateInstantVelocity();
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(10));
 
         if(mainTaskDestroyed.load())
         {

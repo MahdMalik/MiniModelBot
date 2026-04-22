@@ -72,7 +72,7 @@
 static uint8_t s_led_state = 0;
 bool usingModel = true;
 
-float probabilityToTraverseAnyways = 0.1;
+float probabilityToTraverseAnyways = 0.2;
 int runNumber = 0;
 const int maxRuns = 100;
 
@@ -144,12 +144,14 @@ static void control_task(void *pvParameters)
         if (goingForward)
         {
             
-            if(((getLastClass1Prob() > 0.50) &&(label == 1)) || ((getLastClass1Prob() <= 0.50) && (label == 0)))
+            if(((getLastClass1Prob() > CONFIDENCE_THRESHOLD) &&(label == 1)) || ((getLastClass1Prob() <= CONFIDENCE_THRESHOLD) && (label == 0)))
             {
+                ESP_LOGI("acc", "CORRECT!");
                 correctIncorrectArr.push_back(true);
             }
             else
             {
+                ESP_LOGI("acc", "INCORRECT!");
                 correctIncorrectArr.push_back(false);
             }
             ESP_LOGI("CONTROL", "Model was called!");
