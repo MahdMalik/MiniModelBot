@@ -37,6 +37,7 @@
 #include "esp_heap_caps.h"
 #include "PrintFunctions.h"
 #include "driver/i2c_master.h"
+#include <atomic>
 
 struct IMUData {
     float ax, ay, az;
@@ -51,7 +52,10 @@ void i2c_bus_recovery();
 
 void sensorSetup();
 
-IMUData getSensorData();
+IMUData getSensorData(float dt);
 
+void signalDestroyedTask();
+void resetAccumulation();
 int getLabel();
+void imu_task(void *pvParameters);
 double getInstantVelocity();

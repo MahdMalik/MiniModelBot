@@ -256,7 +256,6 @@ float getLastClass1Prob()
 
 void modelLearn(int trueLabel)
 {
-    return;
     auto modelLearnStartTime=esp_timer_get_time();
     if (modelSetupFailed)
     {

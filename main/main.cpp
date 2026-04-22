@@ -130,6 +130,7 @@ static void control_task(void *pvParameters)
 			vTaskDelay(pdMS_TO_TICKS(200));
 			ESP_LOGI("CONTROL", "path is clear, driving forward");
         }
+        resetAccumulation();
 
         vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -197,6 +198,7 @@ static void control_task(void *pvParameters)
 
     writeToFile(finalString);
 
+    signalDestroyedTask();
     vTaskDelete(NULL); 
 }
 
@@ -223,5 +225,6 @@ extern "C" void app_main(void)
     }
 
 
-    xTaskCreate(control_task, "control_task", 8192, NULL, 5, NULL); // modellearn() is in here now btw
+    xTaskCreatePinnedToCore(control_task, "control_task", 8192, NULL, 5, NULL, 0); // modellearn() is in here now btw
+    xTaskCreatePinnedToCore(imu_task, "imu_task", 8192, NULL, 5, NULL, 1); // modellearn() is in here now btw
 }

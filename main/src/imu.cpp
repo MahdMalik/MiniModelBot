@@ -16,6 +16,13 @@ static i2c_master_dev_handle_t dev_handle;
 //using type alias to reduce error
 using RobotIMU = espp::Bmi270<espp::bmi270::Interface::I2C>;
 
+static std::atomic<float> currentVelocity(0.0f);
+
+static std::atomic<bool> mainTaskDestroyed(false);
+
+float acceleration_deadband = 0.05;
+float accel_y_bias = 0;
+const float velocityThreshold = 0.25f;
 
 RobotIMU::Config bmi_config = {
     .device_address = BMI270_ADDR,
@@ -106,9 +113,19 @@ void sensorSetup()
         ESP_LOGE("BMI270", "CRITICAL: Could not find sensor!");
     }
     
+    const int samples = 100;
+    float sum = 0.0f;
+    for (int i = 0; i < samples; i++) {
+        IMUData d = getSensorData(0.02f);
+        sum += d.ay;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    accel_y_bias = sum / samples;
+    ESP_LOGI("IMU", "Bias calibrated: %f", accel_y_bias);
 }
 
-IMUData getSensorData()
+
+IMUData getSensorData(float dt)
 {
     //checks if the imu is initialized before called
     if (!isBmiReady) {
@@ -117,7 +134,6 @@ IMUData getSensorData()
         return {};
     }
 
-    float dt = 1.0f;
     auto start = esp_timer_get_time();
 
     //checks if the imu was able to update successfully 
@@ -131,30 +147,32 @@ IMUData getSensorData()
     auto accel = imu->get_accelerometer();
     auto gyro = imu->get_gyroscope();
 
-    ESP_LOGI("IMU", "Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
-        accel.x * 9.8f, accel.y * 9.8f, accel.z * 9.8f,
-        gyro.x, gyro.y, gyro.z);
+    // ESP_LOGI("IMU", "Accel: [%.2f, %.2f, %.2f] Gyro: [%.2f, %.2f, %.2f]\n",
+    //     accel.x * 9.8f, -accel.y * 9.8f, accel.z * 9.8f,
+    //     gyro.x, gyro.y, gyro.z);
 
     auto elapsed = esp_timer_get_time() - start;
-    ESP_LOGI("IMU", "Update time: %lld us\n", elapsed);
+    // ESP_LOGI("IMU", "Update time: %lld us\n", elapsed);
 
     return {
-        accel.x * 9.8f, accel.y * 9.8f, accel.z * 9.8f,
+        accel.x * 9.8f, -accel.y * 9.8f, accel.z * 9.8f,
         gyro.x, gyro.y, gyro.z
     };
 
 }
 
 //setup as zero since this will run on startup
-double previous_velocity=0;
-double previous_time=0;
+static std::atomic<double> previous_time(0.0f);
+static std::atomic<double> previous_velocity(0.0f);
+static std::atomic<float> y_accel(0.0f);
+
 
 // returns 0 if not traversible (velocity<.5) returns 1 if it was traversible
 int getLabel()
 {
-    double velocity = getInstantVelocity();
-    ESP_LOGI("VELOCITY", "Velocity is %f", velocity);
-    if (velocity <= 0.5)
+    ESP_LOGI("VELOCITY", "Velocity is %f", currentVelocity.load());
+    ESP_LOGI("ACCELERATION", "Acceleration is %f", y_accel.load());
+    if (currentVelocity.load() <= velocityThreshold)
     {
         return 0;
     }
@@ -165,21 +183,56 @@ int getLabel()
 }
 
 //get instant velocity must be called at the beginning since starting velocity will be zero
-double getInstantVelocity(){
-    float dt = 1.0f;
-
+void calculateInstantVelocity(){
     //actually calculating velocity now
     auto current_time = esp_timer_get_time();
-    IMUData data = getSensorData();
+    float dt = (previous_time.load() == 0) ? 0.02f : (current_time - previous_time.load()) / 1000000.0f;
+    IMUData data = getSensorData(dt);
     // divided by gravity, but i don't think we do that actually?
     // float y_accel = data.ay / 9.81;
-    float y_accel = data.ay * 9.81  ;
+    // IMU is very slight at an angle, but that matters
+    y_accel.store(data.ay - accel_y_bias);
+
+    if(fabsf(y_accel.load()) < acceleration_deadband)
+    {
+        y_accel.store(0);
+    }
 
     //vfinal = acceleration *dt *10000 (converting from micro seconds to seconds) + v0;
-    auto current_velocity= y_accel * (current_time-previous_time)/(1000000) + previous_velocity;
+    auto current_velocity= y_accel.load() * (current_time - previous_time.load())/(1000000) + previous_velocity.load();
 
-    previous_velocity = current_velocity;
-    previous_time = current_time;
+    previous_velocity.store(current_velocity);
+    previous_time.store(current_time);
 
-    return current_velocity;
+    currentVelocity.store(current_velocity);
+}
+
+void resetAccumulation()
+{
+    previous_velocity.store(0);
+    previous_time.store(esp_timer_get_time());
+    currentVelocity.store(0);
+}
+
+void signalDestroyedTask()
+{
+    mainTaskDestroyed.store(true);
+}
+
+void imu_task(void *pvParameters)
+{
+   previous_time.store(esp_timer_get_time());
+   while(true)
+   {
+        //LARP LARP LAPR SAHUR!!!
+        calculateInstantVelocity();
+        vTaskDelay(pdMS_TO_TICKS(20));
+
+        if(mainTaskDestroyed.load())
+        {
+            break;
+        }
+    }
+
+    vTaskDelete(NULL);
 }
