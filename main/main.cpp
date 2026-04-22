@@ -69,9 +69,6 @@
 #define DRIVE_FORWARD_POWER 20
 #define TURN_POWER 100
 
-#include "headless_model.h"
-#include "headless_model_data.h"
-
 static uint8_t s_led_state = 0;
 bool usingModel = true;
 
@@ -214,7 +211,7 @@ extern "C" void app_main(void)
     cameraInit();
     if (usingModel)
     {
-        connectModel(g_model, g_model_len, isHeadless);
+        connectModel(isHeadless);
         setupModel();
     }
     ledc_setup();

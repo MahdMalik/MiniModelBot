@@ -54,7 +54,7 @@ extern std::vector<long> inferenceTimes;
 extern std::vector<long> learnTimes;
 extern std::vector<bool> correctIncorrectArr;
 
-void connectModel(const unsigned char* modelData, unsigned int modelLength, bool headlessMode);
+void connectModel(bool headlessMode);
 void setHeadlessMode(bool headless);
 
 float getLastClass1Prob();

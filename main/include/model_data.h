@@ -3056,4 +3056,4 @@ const unsigned char modelWeights[] = {
 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 
 };
 
-const unsigned int modelWeights_len = 36656;
+const unsigned int modelLen = 36656;

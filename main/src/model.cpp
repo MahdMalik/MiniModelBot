@@ -11,7 +11,7 @@ std::vector<long> learnTimes;
 std::vector<bool> correctIncorrectArr;
 
 bool modelSetupFailed = false;
-bool isHeadless = true; // true = headless + custom head, false = original headed model
+bool isHeadless = false; // true = headless + custom head, false = original headed model
 
 static CustomHead *customHead = nullptr;
 
@@ -29,16 +29,19 @@ int32_t theOutputZeroPoint = 0;
 const unsigned char *connectedModel = nullptr;
 unsigned int connectedModelLen = 0;
 
-void setHeadlessMode(bool headless)
+void connectModel(bool headlessMode)
 {
-    isHeadless = headless;
-}
-
-void connectModel(const unsigned char *modelData, unsigned int modelLength, bool headlessMode)
-{
-    setHeadlessMode(headlessMode);
-    connectedModel = modelData;
-    connectedModelLen = modelLength;
+    isHeadless = headlessMode;
+    if(isHeadless)
+    {
+        connectedModel = modelWeightsHeadless;
+        connectedModelLen = modelLenHeadless;
+    }
+    else
+    {
+        connectedModel = modelWeights;
+        connectedModelLen = modelLen;
+    }
 
     CustomPrint("MODEL", "Model connected! Size: %d bytes (%s mode)", connectedModelLen, isHeadless ? "HEADLESS" : "FULL");
 }
