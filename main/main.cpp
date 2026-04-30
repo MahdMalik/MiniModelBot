@@ -130,7 +130,6 @@ static void control_task(void *pvParameters)
 			vTaskDelay(pdMS_TO_TICKS(200));
 			ESP_LOGI("CONTROL", "path is clear, driving forward");
         }
-        resetAccumulation();
 
         vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -139,6 +138,7 @@ static void control_task(void *pvParameters)
         // Update the accuracy
 
         int label = getLabel();
+        resetAccumulation();
         stopMotors();
         // accuracy can only be emasured when we 'go forwards'
         if (goingForward)
